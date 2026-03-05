@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>IC Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;600;700&family=Barlow:wght@400;500;600;700;900&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --border: #252525;
+    --text: #f0f0f0;
+    --muted: #555;
+    --green: #00e676;
+    --red: #ff3d3d;
+    --yellow: #ffd600;
+    --blue: #2979ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; flex-direction: column; height: 100vh; height: 100dvh; }
+  .screen.active { display: flex; }
+
+  /* ── LOAD SCREEN ── */
+  #screen-load {
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    gap: 0;
+    background: var(--bg);
+  }
+
+  .load-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .load-logo span { color: var(--green); }
+
+  .load-tagline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 48px;
+  }
+
+  .upload-box {
+    width: 100%;
+    max-width: 380px;
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 40px 24px;
+    text-align: center;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface);
+  }
+  .upload-box:active { border-color: var(--green); background: #0f1a0f; }
+  .upload-box input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+  .upload-icon { font-size: 48px; margin-bottom: 16px; }
+  .upload-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .upload-sub {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .progress-wrap {
+    width: 100%;
+    max-width: 380px;
+    margin-top: 24px;
+    display: none;
+  }
+  .progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    letter-spacing: 0.08em;
+  }
+  .progress-bar { background: var(--border); border-radius: 4px; height: 4px; overflow: hidden; }
+  .progress-fill { background: var(--green); height: 100%; width: 0%; transition: width 0.3s; border-radius: 4px; }
+  .progress-status { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+  /* ── SCANNER SCREEN ── */
+  #screen-scan {
+    position: relative;
+    background: #000;
+  }
+
+  /* Camera feed */
+  #camera-view {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 1;
+    transform: translateZ(0); /* force GPU layer on Android */
+    -webkit-transform: translateZ(0);
+  }
+
+  /* Overlay UI on top of camera */
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+
+  /* Top bar */
+  .scan-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    padding-top: max(16px, env(safe-area-inset-top));
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, transparent 100%);
+    pointer-events: all;
+  }
+  .scan-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    color: #fff;
+  }
+  .scan-logo span { color: var(--green); }
+  .scan-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    background: rgba(0,230,118,0.1);
+    border: 1px solid rgba(0,230,118,0.3);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .btn-reset {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    pointer-events: all;
+  }
+
+  /* Scan window / targeting reticle */
+  .scan-reticle-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .scan-reticle {
+    width: min(85vw, 340px);
+    aspect-ratio: 3/1;
+    position: relative;
+  }
+
+  /* Corner brackets */
+  .scan-reticle::before, .scan-reticle::after,
+  .scan-reticle .corner-br, .scan-reticle .corner-bl {
+    content: '';
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-color: var(--green);
+    border-style: solid;
+  }
+  .scan-reticle::before { top: 0; left: 0; border-width: 3px 0 0 3px; }
+  .scan-reticle::after  { top: 0; right: 0; border-width: 3px 3px 0 0; }
+  .scan-reticle .corner-br { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+  .scan-reticle .corner-bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; }
+
+  /* Scan line animation */
+  .scan-line {
+    position: absolute;
+    left: 4px; right: 4px;
+    height: 2px;
+    background: linear-gradient(to right, transparent, var(--green), transparent);
+    top: 0;
+    animation: scanline 2s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--green);
+  }
+  @keyframes scanline {
+    0%   { top: 4px; opacity: 1; }
+    50%  { top: calc(100% - 4px); opacity: 1; }
+    100% { top: 4px; opacity: 1; }
+  }
+
+  .scan-hint {
+    text-align: center;
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.08em;
+  }
+
+  /* Bottom panel — result or idle */
+  .scan-bottom {
+    pointer-events: all;
+    padding: 0 0 max(24px, env(safe-area-inset-bottom)) 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.95) 60%, transparent 100%);
+  }
+
+  /* Scan button */
+  .scan-btn-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 20px 24px 8px;
+  }
+
+  .btn-scan {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--green);
+    border: 4px solid rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.1s;
+    box-shadow: 0 0 30px rgba(0,230,118,0.4);
+  }
+  .btn-scan:active { transform: scale(0.93); background: #00c853; }
+  .btn-scan svg { width: 36px; height: 36px; fill: #000; }
+
+  .btn-manual {
+    padding: 12px 20px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #fff;
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+  }
+  .btn-manual:active { background: rgba(255,255,255,0.15); }
+
+  .scan-last {
+    text-align: center;
+    padding: 8px 24px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    min-height: 20px;
+  }
+
+  /* ── RESULT OVERLAY ── */
+  #result-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    cursor: pointer;
+    animation: resultIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #result-overlay.show { display: flex; }
+  @keyframes resultIn {
+    from { transform: scale(0.92); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .result-dismiss {
+    position: absolute;
+    top: max(20px, env(safe-area-inset-top));
+    right: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.08em;
+    background: rgba(0,0,0,0.3);
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .result-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 12px;
+  }
+
+  .result-customer {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(52px, 15vw, 96px);
+    letter-spacing: 0.04em;
+    line-height: 0.9;
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 4px 40px rgba(0,0,0,0.5);
+    margin-bottom: 12px;
+  }
+
+  .result-room {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(28px, 8vw, 52px);
+    letter-spacing: 0.06em;
+    text-align: center;
+    color: rgba(255,255,255,0.85);
+    margin-bottom: 24px;
+  }
+
+  .result-details {
+    background: rgba(0,0,0,0.35);
+    border-radius: 12px;
+    padding: 16px 24px;
+    width: 100%;
+    max-width: 360px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .result-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-size: 13px;
+  }
+  .result-detail-row:last-child { border-bottom: none; }
+  .result-detail-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .result-detail-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    font-weight: 600;
+    text-align: right;
+    max-width: 200px;
+  }
+
+  /* Multiple matches */
+  .result-multi-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 0.06em;
+    color: var(--yellow);
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .result-multi-item {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.1);
+    transition: border-color 0.15s;
+  }
+  .result-multi-item:active { border-color: rgba(255,255,255,0.4); }
+  .result-multi-customer {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.04em;
+    color: #fff;
+    line-height: 1;
+  }
+  .result-multi-room {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    margin-top: 4px;
+  }
+  .result-multi-so {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 2px;
+  }
+
+  /* Not found */
+  .result-notfound {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    letter-spacing: 0.04em;
+    color: var(--red);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .result-notfound-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    text-align: center;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── MANUAL INPUT OVERLAY ── */
+  #manual-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.95);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+  }
+  #manual-overlay.show { display: flex; }
+
+  .manual-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .manual-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 24px;
+  }
+
+  .manual-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.12em;
+    margin-bottom: 24px;
+    min-height: 48px;
+    min-width: 280px;
+    text-align: center;
+    border-bottom: 2px solid var(--green);
+    padding-bottom: 8px;
+  }
+
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 16px;
+  }
+
+  .key {
+    aspect-ratio: 1.4;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+    user-select: none;
+  }
+  .key:active { background: #2a2a2a; }
+  .key.key-del { font-size: 20px; color: var(--red); }
+  .key.key-go { background: var(--green); color: #000; font-size: 18px; font-weight: 900; letter-spacing: 0.05em; }
+  .key.key-go:active { background: #00c853; }
+  .key.key-cancel { background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; border-color: transparent; }
+
+  /* OCR processing indicator */
+  #ocr-processing {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #ocr-processing.show { display: flex; }
+  .ocr-spinner {
+    width: 56px; height: 56px;
+    border: 3px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ocr-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--green);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    padding: 10px 20px;
+    background: rgba(0,0,0,0.6);
+    border-top: 1px solid var(--border);
+  }
+  .stat-item {
+    flex: 1;
+    text-align: center;
+  }
+  .stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    color: var(--green);
+    line-height: 1;
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* Customer color dots in stats */
+  .color-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  /* Haptic flash overlay */
+  #flash {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #flash.flash-green { background: rgba(0,230,118,0.25); }
+  #flash.flash-red   { background: rgba(255,61,61,0.25); }
+  #flash.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- LOAD SCREEN -->
+<div class="screen active" id="screen-load">
+  <div class="load-logo">IC<span>SCAN</span></div>
+  <div class="load-tagline">Inspired Closets · Piece Lookup</div>
+
+  <div class="upload-box" id="upload-box">
+    <input type="file" id="file-input" accept=".pdf" />
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">Load Packing List</div>
+    <div class="upload-sub">Tap to select the PDF<br>Works offline after loading</div>
+  </div>
+
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-label" id="progress-label">PARSING PDF...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-status" id="progress-status">Starting...</div>
+  </div>
+</div>
+
+<!-- SCANNER SCREEN -->
+<div class="screen" id="screen-scan">
+  <video id="camera-view" autoplay playsinline muted></video>
+
+  <div class="scan-overlay">
+    <div class="scan-topbar">
+      <div class="scan-logo">IC<span>SCAN</span></div>
+      <div class="scan-status" id="scan-status">READY</div>
+      <div class="btn-reset" onclick="resetApp()">↩ NEW PDF</div>
+    </div>
+
+    <div class="scan-reticle-wrap">
+      <div>
+        <div class="scan-reticle">
+          <div class="corner-br"></div>
+          <div class="corner-bl"></div>
+          <div class="scan-line"></div>
+        </div>
+        <div class="scan-hint">AIM AT PIECE NUMBER — TAP BUTTON TO SCAN</div>
+      </div>
+    </div>
+
+    <div class="scan-bottom">
+      <div class="scan-btn-wrap">
+        <div class="btn-manual" onclick="showManual()">✎ TYPE</div>
+        <div class="btn-scan" onclick="doScan()" id="btn-scan">
+          <svg viewBox="0 0 24 24"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zM19 13h1.5v1.5H19V13zm0 3h1.5v1.5H19V16z"/></svg>
+        </div>
+        <div class="btn-manual" onclick="toggleTorch()" id="btn-torch">⚡ LIGHT</div>
+      </div>
+      <div class="scan-last" id="scan-last">— tap scan button to read piece number —</div>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="stats-bar"></div>
+</div>
+
+<!-- RESULT OVERLAY -->
+<div id="result-overlay" onclick="dismissResult()">
+  <div class="result-dismiss">TAP TO DISMISS</div>
+  <div id="result-content"></div>
+</div>
+
+<!-- MANUAL OVERLAY -->
+<div id="manual-overlay">
+  <div class="manual-title">ENTER PIECE NUMBER</div>
+  <div class="manual-sub">TYPE THE 9-DIGIT NUMBER FROM THE LABEL</div>
+  <div class="manual-display" id="manual-display">_________</div>
+  <div class="keypad">
+    <div class="key" onclick="keyPress('1')">1</div>
+    <div class="key" onclick="keyPress('2')">2</div>
+    <div class="key" onclick="keyPress('3')">3</div>
+    <div class="key" onclick="keyPress('4')">4</div>
+    <div class="key" onclick="keyPress('5')">5</div>
+    <div class="key" onclick="keyPress('6')">6</div>
+    <div class="key" onclick="keyPress('7')">7</div>
+    <div class="key" onclick="keyPress('8')">8</div>
+    <div class="key" onclick="keyPress('9')">9</div>
+    <div class="key key-cancel" onclick="hideManual()">CANCEL</div>
+    <div class="key" onclick="keyPress('0')">0</div>
+    <div class="key key-del" onclick="keyDel()">⌫</div>
+  </div>
+  <div class="key key-go" style="width:100%;max-width:300px;height:56px;border-radius:12px;font-size:18px" onclick="keyGo()">LOOK UP →</div>
+</div>
+
+<!-- OCR PROCESSING -->
+<div id="ocr-processing">
+  <div class="ocr-spinner"></div>
+  <div class="ocr-label">READING LABEL...</div>
+</div>
+
+<!-- FLASH -->
+<div id="flash"></div>
+
+<!-- Tesseract OCR -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── DATA ──
+  let itemIndex = {};     // itemNum → [{custRef, soNum, description, qty, containerId}]
+  let shipmentInfo = {};
+  let customerColors = {};
+  let scanCount = 0;
+  let manualInput = '';
+  let cameraStream = null;
+  let torchOn = false;
+  let lastScannedNum = '';
+
+  // Customer color palette — vivid, distinct
+  const PALETTE = [
+    '#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa',
+    '#00acc1','#e91e63','#fdd835','#6d4c41','#00897b',
+    '#3949ab','#f4511e','#00e5ff','#76ff03','#ff4081'
+  ];
+  let colorIdx = 0;
+
+  function getCustomerColor(custRef) {
+    // Extract project name (before first _)
+    const proj = custRef.split('_')[0].split(' ')[0];
+    if (!customerColors[proj]) {
+      customerColors[proj] = PALETTE[colorIdx % PALETTE.length];
+      colorIdx++;
+    }
+    return customerColors[proj];
+  }
+
+  // ── PDF PARSING (same logic as main app) ──
+  const fileInput = document.getElementById('file-input');
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadPDF(e.target.files[0]);
+  });
+
+  async function loadPDF(file) {
+    document.getElementById('progress-wrap').style.display = 'block';
+    document.getElementById('upload-box').style.opacity = '0.4';
+    document.getElementById('upload-box').style.pointerEvents = 'none';
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const total = pdf.numPages;
+
+    for (let p = 1; p <= total; p++) {
+      const pct = Math.round((p / total) * 100);
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('progress-status').textContent = `Page ${p} of ${total}`;
+
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const text = content.items.map(i => i.str).join(' ');
+      parsePage(text);
+    }
+
+    document.getElementById('progress-label').textContent = 'DONE — ' + Object.keys(itemIndex).length + ' ITEMS LOADED';
+    document.getElementById('progress-status').textContent = 'Starting scanner...';
+
+    setTimeout(() => startScanner(), 800);
+  }
+
+  function parsePage(text) {
+    const shipM = text.match(/Shipment[:\s#]*([\w-]+)/);
+    if (shipM && !shipmentInfo.shipmentNo) shipmentInfo.shipmentNo = shipM[1];
+    const dateM = text.match(/Ship Date[:\s]+([\d/]+)/);
+    if (dateM && !shipmentInfo.shipDate) shipmentInfo.shipDate = dateM[1];
+
+    const tokens = text.replace(/\s+/g, ' ').trim().split(' ');
+    const containerPat = /^(1711|7000)\d{9,12}$/;
+    const soPat = /^10\d{5}$/;
+    const descStart = /^(DW|DR|SH|VT|TR|FF|CK|BP|Wrap|Bottom|Shelf|Drawer|DF|WS|HP|DB|Vert|MWD|ADD)/i;
+
+    for (let i = 0; i < tokens.length; i++) {
+      if (!containerPat.test(tokens[i])) continue;
+      const containerId = tokens[i];
+      let j = i + 1;
+      if (j >= tokens.length || !/^\d{9}$/.test(tokens[j])) continue;
+      const itemNum = tokens[j++];
+      if (j >= tokens.length || !soPat.test(tokens[j])) continue;
+      const soNum = tokens[j++];
+
+      let custRefToks = [];
+      while (j < tokens.length && !descStart.test(tokens[j]) && !containerPat.test(tokens[j]) && custRefToks.length < 15) {
+        custRefToks.push(tokens[j++]);
+      }
+      const custRef = custRefToks.join(' ').trim();
+
+      let descToks = [];
+      while (j < tokens.length && !containerPat.test(tokens[j]) && !/^\d{9}$/.test(tokens[j]) && descToks.length < 12) {
+        descToks.push(tokens[j++]);
+      }
+
+      let qty = 1;
+      if (descToks.length > 0 && /^\d{1,3}$/.test(descToks[descToks.length - 1])) {
+        qty = parseInt(descToks.pop());
+      }
+      const description = descToks.join(' ').trim();
+      if (!custRef || !description) continue;
+
+      if (!itemIndex[itemNum]) itemIndex[itemNum] = [];
+      // Avoid duplicates
+      const exists = itemIndex[itemNum].find(r => r.soNum === soNum && r.custRef === custRef);
+      if (!exists) {
+        itemIndex[itemNum].push({ custRef, soNum, description, qty, containerId });
+      }
+    }
+  }
+
+  // ── CAMERA ──
+  async function startScanner() {
+    document.getElementById('screen-load').classList.remove('active');
+    document.getElementById('screen-scan').classList.add('active');
+    buildStatsBar();
+
+    const video = document.getElementById('camera-view');
+
+    try {
+      // Stop any existing stream first
+      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); }
+
+      // Try rear camera first, fall back to any camera
+      let constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      };
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch(e1) {
+        // Fallback — just get any camera
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
+      video.srcObject = cameraStream;
+
+      // Android Chrome often needs explicit play() call
+      video.onloadedmetadata = () => {
+        video.play().then(() => {
+          document.getElementById('scan-status').textContent = 'READY';
+          document.getElementById('scan-last').textContent = '— tap scan button to read piece number —';
+        }).catch(err => {
+          document.getElementById('scan-last').textContent = 'Camera error: ' + err.message;
+        });
+      };
+
+      // Fallback if onloadedmetadata doesn't fire
+      setTimeout(() => {
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+      }, 1500);
+
+    } catch(e) {
+      document.getElementById('scan-status').textContent = 'NO CAMERA';
+      document.getElementById('scan-last').textContent = 'Camera blocked — use ✎ TYPE button · Error: ' + e.message;
+      document.getElementById('btn-scan').style.opacity = '0.4';
+      document.getElementById('btn-scan').style.pointerEvents = 'none';
+    }
+  }
+
+  function buildStatsBar() {
+    const total = Object.values(itemIndex).flat().length;
+    const customers = new Set(Object.values(itemIndex).flat().map(r => r.custRef.split('_')[0].split(' ')[0])).size;
+    const items = Object.keys(itemIndex).length;
+    document.getElementById('stats-bar').innerHTML = `
+      <div class="stat-item"><div class="stat-num">${items}</div><div class="stat-label">Items</div></div>
+      <div class="stat-item"><div class="stat-num">${total}</div><div class="stat-label">Pieces</div></div>
+      <div class="stat-item"><div class="stat-num">${customers}</div><div class="stat-label">Customers</div></div>
+      <div class="stat-item"><div class="stat-num" id="stat-scans">0</div><div class="stat-label">Scanned</div></div>
+    `;
+  }
+
+  // ── OCR SCAN ──
+  async function doScan() {
+    const video = document.getElementById('camera-view');
+    if (!video.srcObject) { showManual(); return; }
+
+    document.getElementById('ocr-processing').classList.add('show');
+    document.getElementById('btn-scan').style.pointerEvents = 'none';
+
+    try {
+      // Capture frame from video
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Crop to center region (where the piece number would be in the reticle)
+      const cropCanvas = document.createElement('canvas');
+      const cw = Math.floor(canvas.width * 0.7);
+      const ch = Math.floor(canvas.height * 0.25);
+      const cx = Math.floor((canvas.width - cw) / 2);
+      const cy = Math.floor((canvas.height - ch) / 2);
+      cropCanvas.width = cw;
+      cropCanvas.height = ch;
+      const cropCtx = cropCanvas.getContext('2d');
+
+      // Preprocess: grayscale + high contrast
+      cropCtx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
+      const imageData = cropCtx.getImageData(0, 0, cw, ch);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+        const contrast = gray > 128 ? 255 : 0;
+        data[i] = data[i+1] = data[i+2] = contrast;
+      }
+      cropCtx.putImageData(imageData, 0, 0);
+
+      // Run Tesseract
+      const result = await Tesseract.recognize(cropCanvas, 'eng', {
+        tessedit_char_whitelist: '0123456789',
+        tessedit_pageseg_mode: '7',
+      });
+
+      const rawText = result.data.text.replace(/\D/g, '').trim();
+      document.getElementById('ocr-processing').classList.remove('show');
+      document.getElementById('btn-scan').style.pointerEvents = 'all';
+
+      // Try to find a 9-digit sequence in the result
+      const match9 = rawText.match(/\d{9}/);
+      if (match9) {
+        lookupItem(match9[0]);
+      } else if (rawText.length >= 6) {
+        // Try fuzzy match — find closest item number
+        const fuzzyMatch = findFuzzy(rawText);
+        if (fuzzyMatch) {
+          lookupItem(fuzzyMatch);
+        } else {
+          showNotFound(rawText || '???', 'Could not read clearly — try again or use TYPE');
+        }
+      } else {
+        showNotFound('—', 'Nothing detected — hold steady and try again');
+      }
+    } catch(e) {
+      document.getElementById('ocr-processing').classList.remove('show');
+      document.getElementById('btn-scan').style.pointerEvents = 'all';
+      showNotFound('ERROR', 'OCR failed — use TYPE button instead');
+    }
+  }
+
+  function findFuzzy(rawText) {
+    // If OCR returns something close but not exact 9 digits, try matching known item numbers
+    const keys = Object.keys(itemIndex);
+    for (const key of keys) {
+      if (rawText.includes(key) || key.includes(rawText)) return key;
+    }
+    return null;
+  }
+
+  // ── TORCH ──
+  function toggleTorch() {
+    if (!cameraStream) return;
+    const track = cameraStream.getVideoTracks()[0];
+    torchOn = !torchOn;
+    try {
+      track.applyConstraints({ advanced: [{ torch: torchOn }] });
+      document.getElementById('btn-torch').textContent = torchOn ? '⚡ OFF' : '⚡ LIGHT';
+    } catch(e) {}
+  }
+
+  // ── LOOKUP ──
+  function lookupItem(itemNum) {
+    lastScannedNum = itemNum;
+    scanCount++;
+    document.getElementById('stat-scans') && (document.getElementById('stat-scans').textContent = scanCount);
+    document.getElementById('scan-last').textContent = 'Last: ' + itemNum;
+
+    const matches = itemIndex[itemNum];
+
+    if (!matches || matches.length === 0) {
+      flashScreen('red');
+      vibrate([100, 50, 100]);
+      showNotFound(itemNum, 'Not found in packing list');
+      return;
+    }
+
+    flashScreen('green');
+    vibrate([50]);
+
+    if (matches.length === 1) {
+      showSingleResult(itemNum, matches[0]);
+    } else {
+      showMultiResult(itemNum, matches);
+    }
+  }
+
+  function showSingleResult(itemNum, match) {
+    const color = getCustomerColor(match.custRef);
+    const proj = match.custRef.split('_')[0];
+    // Extract room from custRef — everything after last _ segment
+    const parts = match.custRef.split('_');
+    const room = parts.length > 1 ? parts[parts.length - 1].replace(/-/g, ' ') : match.custRef;
+    // Clean up room — remove leading numbers like "1 - "
+    const cleanRoom = room.replace(/^\d+\s*-\s*/, '').trim();
+
+    document.getElementById('result-content').innerHTML = `
+      <div class="result-tag">PIECE ${itemNum}</div>
+      <div class="result-customer">${esc(proj)}</div>
+      <div class="result-room">${esc(cleanRoom || match.custRef)}</div>
+      <div class="result-details">
+        <div class="result-detail-row">
+          <span class="result-detail-label">DESCRIPTION</span>
+          <span class="result-detail-value">${esc(match.description)}</span>
+        </div>
+        <div class="result-detail-row">
+          <span class="result-detail-label">SO#</span>
+          <span class="result-detail-value">${esc(match.soNum)}</span>
+        </div>
+        <div class="result-detail-row">
+          <span class="result-detail-label">QTY</span>
+          <span class="result-detail-value">${match.qty}</span>
+        </div>
+        <div class="result-detail-row">
+          <span class="result-detail-label">CONTAINER</span>
+          <span class="result-detail-value" style="font-size:10px">…${(match.containerId||'—').slice(-6)}</span>
+        </div>
+      </div>
+    `;
+
+    const overlay = document.getElementById('result-overlay');
+    overlay.style.background = color;
+    overlay.classList.add('show');
+  }
+
+  function showMultiResult(itemNum, matches) {
+    const items = matches.map((m, i) => {
+      const color = getCustomerColor(m.custRef);
+      const proj = m.custRef.split('_')[0];
+      const parts = m.custRef.split('_');
+      const room = (parts.length > 1 ? parts[parts.length - 1] : m.custRef).replace(/-/g, ' ').replace(/^\d+\s*-\s*/, '').trim();
+      return `
+        <div class="result-multi-item" style="background:${color}22;border-color:${color}55" onclick="dismissResult()">
+          <div class="result-multi-customer">${esc(proj)}</div>
+          <div class="result-multi-room">${esc(room)}</div>
+          <div class="result-multi-so">SO# ${esc(m.soNum)} · ${esc(m.description)}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('result-content').innerHTML = `
+      <div class="result-multi-title">⚠ ${matches.length} MATCHES FOR ${itemNum}</div>
+      ${items}
+    `;
+
+    const overlay = document.getElementById('result-overlay');
+    overlay.style.background = '#1a1200';
+    overlay.classList.add('show');
+  }
+
+  function showNotFound(itemNum, reason) {
+    document.getElementById('result-content').innerHTML = `
+      <div class="result-notfound">NOT FOUND</div>
+      <div class="result-notfound-sub">${esc(itemNum)}</div>
+      <div class="result-notfound-sub" style="margin-top:8px;font-size:11px">${esc(reason)}</div>
+    `;
+    const overlay = document.getElementById('result-overlay');
+    overlay.style.background = '#1a0000';
+    overlay.classList.add('show');
+  }
+
+  function dismissResult() {
+    document.getElementById('result-overlay').classList.remove('show');
+  }
+
+  // ── MANUAL INPUT ──
+  function showManual() {
+    manualInput = '';
+    updateManualDisplay();
+    document.getElementById('manual-overlay').classList.add('show');
+  }
+  function hideManual() {
+    document.getElementById('manual-overlay').classList.remove('show');
+  }
+  function keyPress(digit) {
+    if (manualInput.length >= 9) return;
+    manualInput += digit;
+    updateManualDisplay();
+    vibrate([10]);
+  }
+  function keyDel() {
+    manualInput = manualInput.slice(0, -1);
+    updateManualDisplay();
+  }
+  function keyGo() {
+    if (manualInput.length < 3) return;
+    hideManual();
+    lookupItem(manualInput);
+  }
+  function updateManualDisplay() {
+    const padded = manualInput.padEnd(9, '_');
+    document.getElementById('manual-display').textContent = padded;
+  }
+
+  // ── UTILS ──
+  function flashScreen(color) {
+    const el = document.getElementById('flash');
+    el.className = 'flash-' + color;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 200);
+  }
+
+  function vibrate(pattern) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  }
+
+  function resetApp() {
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+    itemIndex = {}; shipmentInfo = {}; customerColors = {}; scanCount = 0; colorIdx = 0;
+    document.getElementById('screen-scan').classList.remove('active');
+    document.getElementById('screen-load').classList.add('active');
+    document.getElementById('progress-wrap').style.display = 'none';
+    document.getElementById('upload-box').style.opacity = '1';
+    document.getElementById('upload-box').style.pointerEvents = 'all';
+    document.getElementById('progress-fill').style.width = '0%';
+    fileInput.value = '';
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>

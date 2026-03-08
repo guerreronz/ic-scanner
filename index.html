@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>IC Scanner</title>
+<title>IC Receiving</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;600;700&family=Barlow:wght@400;500;600;700;900&display=swap');
@@ -31,7 +31,6 @@
     font-family: 'Barlow', sans-serif;
     min-height: 100vh;
     min-height: 100dvh;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
@@ -118,27 +117,36 @@
   #screen-scan {
     position: relative;
     background: #000;
+    display: flex;
+    flex-direction: column;
+    padding-top: 46px;
+    height: 100vh;
+    height: 100dvh;
   }
 
-  /* Camera feed */
+  /* Camera feed — shown only when scan tab active */
   #camera-view {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 1;
-    transform: translateZ(0); /* force GPU layer on Android */
-    -webkit-transform: translateZ(0);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity 0.2s;
   }
+  #screen-scan.camera-on #camera-view { opacity: 1; }
 
-  /* Overlay UI on top of camera */
+  /* Overlay UI — solid dark background, fills screen */
   .scan-overlay {
-    position: absolute;
-    inset: 0;
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
-    pointer-events: none;
+    min-height: 100%;
+    background: var(--bg);
+    pointer-events: all;
   }
 
   /* Top bar */
@@ -248,8 +256,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    padding: 20px 24px 8px;
+    gap: 20px;
+    padding: 16px 24px 4px;
   }
 
   .btn-scan {
@@ -268,19 +276,51 @@
   .btn-scan:active { transform: scale(0.93); background: #00c853; }
   .btn-scan svg { width: 36px; height: 36px; fill: #000; }
 
-  .btn-manual {
-    padding: 12px 20px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #fff;
-    font-family: 'Barlow', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
+  .btn-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    height: 68px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.07);
+    border: 1.5px solid rgba(255,255,255,0.14);
     cursor: pointer;
-    letter-spacing: 0.03em;
+    transition: background 0.15s;
+    gap: 3px;
   }
-  .btn-manual:active { background: rgba(255,255,255,0.15); }
+  .btn-side:active { background: rgba(255,255,255,0.18); border-color: var(--yellow); }
+  .btn-side-icon { font-size: 24px; font-weight: 900; color: var(--yellow); line-height: 1; }
+  .btn-side-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.08em; }
+
+  .scan-btn-labels {
+    display: flex;
+    justify-content: space-around;
+    padding: 3px 24px 0;
+  }
+  .scan-btn-labels span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.06em;
+    width: 68px;
+    text-align: center;
+  }
+
+  .scan-torch-row { display: flex; justify-content: center; padding: 8px 0 0; }
+  .btn-torch-small {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    padding: 5px 18px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  .btn-torch-small:active { color: var(--yellow); border-color: var(--yellow); }
 
   .scan-last {
     text-align: center;
@@ -295,7 +335,8 @@
   /* ── RESULT OVERLAY ── */
   #result-overlay {
     position: fixed;
-    inset: 0;
+    top: 46px;
+    left: 0; right: 0; bottom: 0;
     z-index: 100;
     display: none;
     flex-direction: column;
@@ -303,27 +344,23 @@
     justify-content: center;
     padding: 24px;
     cursor: pointer;
+    background: #0a0a0a;
     animation: resultIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
   }
   #result-overlay.show { display: flex; }
+  #result-content {
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
   @keyframes resultIn {
     from { transform: scale(0.92); opacity: 0; }
     to   { transform: scale(1); opacity: 1; }
   }
 
-  .result-dismiss {
-    position: absolute;
-    top: max(20px, env(safe-area-inset-top));
-    right: 20px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: rgba(255,255,255,0.5);
-    letter-spacing: 0.08em;
-    background: rgba(0,0,0,0.3);
-    padding: 6px 12px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.15);
-  }
+
 
   .result-tag {
     font-family: 'JetBrains Mono', monospace;
@@ -336,28 +373,32 @@
 
   .result-customer {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: clamp(52px, 15vw, 96px);
+    font-size: 80px;
     letter-spacing: 0.04em;
-    line-height: 0.9;
+    line-height: 1;
     text-align: center;
     color: #fff;
     text-shadow: 0 4px 40px rgba(0,0,0,0.5);
-    margin-bottom: 12px;
+    margin-bottom: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    display: block;
   }
 
   .result-room {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: clamp(28px, 8vw, 52px);
+    font-size: clamp(56px, 16vw, 110px);
     letter-spacing: 0.06em;
     text-align: center;
-    color: rgba(255,255,255,0.85);
-    margin-bottom: 24px;
+    color: rgba(255,255,255,0.95);
+    margin-bottom: 20px;
+    line-height: 0.9;
   }
 
   .result-details {
     background: rgba(0,0,0,0.35);
     border-radius: 12px;
-    padding: 16px 24px;
+    padding: 20px 28px;
     width: 100%;
     max-width: 360px;
     border: 1px solid rgba(255,255,255,0.1);
@@ -367,25 +408,25 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
+    padding: 10px 0;
     border-bottom: 1px solid rgba(255,255,255,0.07);
-    font-size: 13px;
+    font-size: 14px;
   }
   .result-detail-row:last-child { border-bottom: none; }
   .result-detail-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: rgba(255,255,255,0.4);
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
   .result-detail-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    color: rgba(255,255,255,0.9);
     font-weight: 600;
     text-align: right;
-    max-width: 200px;
+    max-width: 260px;
   }
 
   /* Multiple matches */
@@ -444,80 +485,6 @@
     text-align: center;
     letter-spacing: 0.06em;
   }
-
-  /* ── MANUAL INPUT OVERLAY ── */
-  #manual-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: rgba(0,0,0,0.95);
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 24px;
-  }
-  #manual-overlay.show { display: flex; }
-
-  .manual-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 32px;
-    letter-spacing: 0.06em;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .manual-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    margin-bottom: 24px;
-  }
-
-  .manual-display {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 36px;
-    font-weight: 700;
-    color: var(--green);
-    letter-spacing: 0.12em;
-    margin-bottom: 24px;
-    min-height: 48px;
-    min-width: 280px;
-    text-align: center;
-    border-bottom: 2px solid var(--green);
-    padding-bottom: 8px;
-  }
-
-  .keypad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    width: 100%;
-    max-width: 300px;
-    margin-bottom: 16px;
-  }
-
-  .key {
-    aspect-ratio: 1.4;
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: 'Barlow', sans-serif;
-    font-size: 28px;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.1s;
-    user-select: none;
-  }
-  .key:active { background: #2a2a2a; }
-  .key.key-del { font-size: 20px; color: var(--red); }
-  .key.key-go { background: var(--green); color: #000; font-size: 18px; font-weight: 900; letter-spacing: 0.05em; }
-  .key.key-go:active { background: #00c853; }
-  .key.key-cancel { background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; border-color: transparent; }
 
   /* OCR processing indicator */
   #ocr-processing {
@@ -578,6 +545,739 @@
   /* Customer color dots in stats */
   .color-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 
+  /* ── WORKFLOW MODE BADGE ── */
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .mode-badge.mode-pallet { background: rgba(255,214,0,0.15); color: var(--yellow); border: 1px solid rgba(255,214,0,0.3); }
+  .mode-badge.mode-item   { background: rgba(0,230,118,0.12); color: var(--green);  border: 1px solid rgba(0,230,118,0.25); }
+
+  /* ── CONTAINER PROGRESS BAR (top of scan screen) ── */
+  #container-progress {
+    display: none;
+    padding: 8px 20px 0;
+  }
+  #container-progress.show { display: block; }
+  .cp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .cp-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.08em;
+  }
+  .cp-count {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    color: var(--text);
+    letter-spacing: 0.06em;
+  }
+  .cp-bar-wrap {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .cp-bar-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  .cp-customers {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .co-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .co-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--yellow);
+    letter-spacing: 0.1em;
+    background: rgba(255,214,0,0.1);
+    border: 1px solid rgba(255,214,0,0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .co-cancel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .co-id {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+  .co-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  .co-customer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 28px;
+    flex: 1;
+  }
+  .co-customer-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .co-cust-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .co-cust-name {
+    font-family: 'Barlow', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .co-cust-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .btn-start-receiving {
+    width: 100%;
+    padding: 18px;
+    background: var(--green);
+    color: #000;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    letter-spacing: 0.1em;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn-start-receiving:active { background: #00c853; }
+
+  .complete-icon { font-size: 72px; margin-bottom: 16px; }
+  .complete-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    color: var(--green);
+    letter-spacing: 0.08em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .complete-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 32px;
+  }
+  .btn-next-pallet {
+    width: 100%;
+    max-width: 300px;
+    padding: 18px;
+    background: var(--green);
+    color: #000;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    margin-bottom: 14px;
+  }
+  .btn-next-pallet:active { background: #00c853; }
+  .btn-skip-pallet {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── TAB BAR ── */
+  .tab-bar {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 400;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 13px 8px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tab-btn.active {
+    color: var(--green);
+    border-bottom-color: var(--green);
+  }
+  .tab-action {
+    flex: 1;
+    padding: 13px 8px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+  .tab-action:active { color: #fff; }
+  .tab-action-ccf { color: #ff6b35; }
+  .tab-action-ccf:active { color: #ff8c5a; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: flex; flex-direction: column; position: absolute; top: 46px; left: 0; right: 0; bottom: 52px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── BROWSE PANEL ── */
+  #browse-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .browse-pallet-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .browse-pallet-bar::-webkit-scrollbar { display: none; }
+  .browse-pallet-chip {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.15s;
+  }
+  .browse-pallet-chip.active {
+    background: var(--green);
+    border-color: var(--green);
+    color: #000;
+  }
+  .browse-search-bar {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .browse-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+  }
+  .browse-search-input:focus { border-color: var(--green); }
+  .browse-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+  }
+  .browse-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .browse-table thead th {
+    position: sticky;
+    top: 0;
+    background: #111;
+    padding: 8px 10px;
+    text-align: left;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .browse-table tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s;
+  }
+  .browse-table tbody tr:active { background: rgba(255,255,255,0.05); }
+  .browse-table tbody tr.row-done { opacity: 0.35; }
+  .browse-table tbody td {
+    padding: 10px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .browse-table .col-status {
+    width: 28px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .browse-table .col-item {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .browse-table .col-desc {
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .browse-table .col-room {
+    color: rgba(255,255,255,0.3);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .browse-table .col-qty {
+    text-align: right;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .browse-empty {
+    text-align: center;
+    padding: 40px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+  }
+  .key {
+    aspect-ratio: 1.6;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .key:active { background: #2a2a2a; }
+  .key.key-del { font-size: 20px; color: var(--red); }
+  .key.key-go  { background: var(--green); color: #000; font-size: 18px; font-weight: 900; letter-spacing: 0.05em; }
+  .key.key-go:active { background: #00c853; }
+  .key.key-cancel { background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; border-color: transparent; }
+
+  /* ── MAIN INPUT AREA (always visible keypad) ── */
+  .main-input-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px 24px max(16px, env(safe-area-inset-bottom));
+    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .main-digits-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-align: center;
+    text-transform: uppercase;
+    width: 100%;
+    max-width: 320px;
+  }
+  .main-digits {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 52px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.2em;
+    text-align: center;
+    line-height: 1;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+    width: 100%;
+    max-width: 320px;
+    white-space: nowrap;
+  }
+  .main-keypad {
+    width: 100%;
+    max-width: 320px;
+  }
+  .main-keypad .key {
+    aspect-ratio: unset;
+    height: 64px;
+  }
+  .main-actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .btn-action-secondary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-action-secondary:active { border-color: var(--green); color: var(--green); }
+  .btn-action-ccf {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px;
+    background: rgba(255,107,53,0.08);
+    border: 1px solid rgba(255,107,53,0.3);
+    border-radius: 12px;
+    color: #ff6b35;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .btn-action-ccf:active { background: rgba(255,107,53,0.2); }
+
+  /* ── SCAN CAMERA (now a tab panel) ── */
+  .sco-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 2;
+  }
+  .sco-cancel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+    background: rgba(0,0,0,0.5);
+    padding: 8px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  .sco-hint {
+    position: absolute;
+    bottom: 100px; left: 0; right: 0;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.1em;
+  }
+  .sco-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: var(--green);
+    cursor: pointer;
+    margin: 16px auto 24px;
+  }
+  .sco-btn:active { background: #00c853; transform: scale(0.93); }
+  .sco-btn svg { width: 36px; height: 36px; fill: #000; }
+
+  #ccf-step-item * {
+    max-width: 320px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .ccf-keypad .key {
+    height: 64px;
+    border-color: rgba(255,107,53,0.2);
+  }
+  .ccf-keypad .key:active { background: rgba(255,107,53,0.1); }
+  .ccf-del { color: #ff6b35 !important; }
+  .ccf-go {
+    background: #ff6b35 !important;
+    color: #000 !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.05em;
+    border-color: #ff6b35 !important;
+  }
+  .ccf-go:active { background: #e05a28 !important; }
+
+  /* ── CCF (now a tab panel) ── */
+  .ccf-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0 16px;
+    flex-shrink: 0;
+  }
+  .ccf-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    color: #ff6b35;
+  }
+  .ccf-cancel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  #ccf-step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    width: 100%;
+    gap: 16px;
+  }
+  .ccf-step-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-align: center;
+  }
+  .ccf-item-display {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 320px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255,107,53,0.4);
+  }
+  .ccf-digit-box {
+    flex: 1;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: #ff6b35;
+    line-height: 1;
+  }
+  .ccf-piece-info {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid #ff6b35;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+  .ccf-piece-name {
+    font-family: 'Barlow', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .ccf-piece-room {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .ccf-piece-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+  }
+  .ccf-customer-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .ccf-customer-btn:active { border-color: #ff6b35; }
+  .ccf-customer-btn-name {
+    font-family: 'Barlow', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .ccf-customer-btn-room {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .ccf-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex: 1;
+  }
+  .ccf-cat-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .ccf-cat-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #ff6b35;
+    padding: 10px 14px;
+    background: rgba(255,107,53,0.08);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+  .ccf-cat-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .ccf-chip {
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .ccf-chip.selected {
+    background: #ff6b35;
+    border-color: #ff6b35;
+    color: #000;
+  }
+  .ccf-submit {
+    width: 100%;
+    padding: 18px;
+    background: #ff6b35;
+    color: #000;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+  }
+  .ccf-submit.ready { opacity: 1; }
+  .ccf-submit:active { background: #e05a28; }
+
+  /* ── CCF CONFIRM (now inline in CCF tab) ── */
+
   /* Haptic flash overlay */
   #flash {
     position: fixed;
@@ -596,8 +1296,8 @@
 
 <!-- LOAD SCREEN -->
 <div class="screen active" id="screen-load">
-  <div class="load-logo">IC<span>SCAN</span></div>
-  <div class="load-tagline">Inspired Closets · Piece Lookup</div>
+  <div class="load-logo">IC<span>RECV</span></div>
+  <div class="load-tagline">Inspired Closets · Receiving Workflow</div>
 
   <div class="upload-box" id="upload-box">
     <input type="file" id="file-input" accept=".pdf" />
@@ -617,71 +1317,190 @@
 <div class="screen" id="screen-scan">
   <video id="camera-view" autoplay playsinline muted></video>
 
-  <div class="scan-overlay">
-    <div class="scan-topbar">
-      <div class="scan-logo">IC<span>SCAN</span></div>
-      <div class="scan-status" id="scan-status">READY</div>
-      <div class="btn-reset" onclick="resetApp()">↩ NEW PDF</div>
-    </div>
-
-    <div class="scan-reticle-wrap">
-      <div>
-        <div class="scan-reticle">
-          <div class="corner-br"></div>
-          <div class="corner-bl"></div>
-          <div class="scan-line"></div>
-        </div>
-        <div class="scan-hint">AIM AT PIECE NUMBER — TAP BUTTON TO SCAN</div>
+  <!-- SCANNER TAB -->
+  <div class="tab-panel active" id="tab-scanner">
+    <div class="scan-overlay">
+      <div class="scan-topbar">
+        <div class="scan-logo">IC<span>RECV</span></div>
+        <div class="scan-status" id="scan-status" style="color:var(--yellow)">NO PACKING LIST</div>
+        <div class="btn-reset" onclick="resetApp()">↩ NEW PDF</div>
       </div>
-    </div>
 
-    <div class="scan-bottom">
-      <div class="scan-btn-wrap">
-        <div class="btn-manual" onclick="showManual()">✎ TYPE</div>
-        <div class="btn-scan" onclick="doScan()" id="btn-scan">
-          <svg viewBox="0 0 24 24"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zM19 13h1.5v1.5H19V13zm0 3h1.5v1.5H19V16z"/></svg>
+      <!-- Always-visible keypad UI -->
+      <div class="main-input-area">
+        <div class="main-digits-sub">ENTER LAST 4 DIGITS</div>
+        <div class="main-digits" id="main-digits">_ _ _ _</div>
+
+        <div class="keypad main-keypad">
+          <div class="key" onclick="mainKey('1')">1</div>
+          <div class="key" onclick="mainKey('2')">2</div>
+          <div class="key" onclick="mainKey('3')">3</div>
+          <div class="key" onclick="mainKey('4')">4</div>
+          <div class="key" onclick="mainKey('5')">5</div>
+          <div class="key" onclick="mainKey('6')">6</div>
+          <div class="key" onclick="mainKey('7')">7</div>
+          <div class="key" onclick="mainKey('8')">8</div>
+          <div class="key" onclick="mainKey('9')">9</div>
+          <div class="key key-del" onclick="mainDel()">⌫</div>
+          <div class="key" onclick="mainKey('0')">0</div>
+          <div class="key" style="background:transparent;border-color:transparent"></div>
         </div>
-        <div class="btn-manual" onclick="toggleTorch()" id="btn-torch">⚡ LIGHT</div>
+
+        <div class="scan-last" id="scan-last"></div>
       </div>
-      <div class="scan-last" id="scan-last">— tap scan button to read piece number —</div>
     </div>
   </div>
 
-  <div class="stats-bar" id="stats-bar"></div>
-</div>
+  <!-- BROWSE TAB -->
+  <div class="tab-panel" id="tab-browse">
+    <div id="browse-panel">
+      <div class="browse-pallet-bar" id="browse-pallet-bar"></div>
+      <div class="browse-search-bar">
+        <input class="browse-search-input" id="browse-search" type="text" placeholder="Search description or part #..." oninput="renderBrowseList()" autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="browse-table-wrap">
+        <table class="browse-table">
+          <thead>
+            <tr>
+              <th class="col-status"></th>
+              <th>PART #</th>
+              <th>DESCRIPTION</th>
+              <th>CLOSET</th>
+              <th>PALLET</th>
+              <th class="col-qty">QTY</th>
+            </tr>
+          </thead>
+          <tbody id="browse-list"></tbody>
+        </table>
+        <div id="browse-empty" class="browse-empty" style="display:none">SELECT A PALLET ABOVE</div>
+      </div>
+    </div>
+  </div>
 
-<!-- RESULT OVERLAY -->
-<div id="result-overlay" onclick="dismissResult()">
-  <div class="result-dismiss">TAP TO DISMISS</div>
+
+  <!-- SCAN TAB -->
+  <div class="tab-panel" id="tab-scan">
+    <div class="scan-overlay" style="background:transparent">
+      <div class="scan-reticle-wrap" style="flex:1;display:flex;align-items:center;justify-content:center">
+        <div>
+          <div class="scan-reticle">
+            <div class="corner-br"></div>
+            <div class="corner-bl"></div>
+            <div class="scan-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sco-hint">AIM AT PIECE LABEL — TAP BUTTON TO SCAN</div>
+      <div style="display:flex;justify-content:center;padding:8px 0">
+        <div class="btn-torch-small" onclick="toggleTorch()" id="btn-torch">⚡ FLASHLIGHT</div>
+      </div>
+      <div class="sco-btn" onclick="doOCRScan()" id="btn-scan">
+        <svg viewBox="0 0 24 24"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M19 5h-6v6h6V5zm-6 8h1.5v1.5H13V13zm1.5 1.5H16V16h-1.5v-1.5zM16 13h1.5v1.5H16V13zm-3 3h1.5v1.5H13V16zm1.5 1.5H16V19h-1.5v-1.5zM16 16h1.5v1.5H16V16zm1.5-1.5H19V16h-1.5v-1.5zM19 13h1.5v1.5H19V13zm0 3h1.5v1.5H19V16z"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- CCF TAB -->
+  <div class="tab-panel" id="tab-ccf">
+    <div class="scan-overlay" style="padding:0 20px 12px">
+      <div id="ccf-step-item" style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;width:100%;gap:16px;padding:0 20px">
+        <div class="ccf-step-label">ENTER FULL 9-DIGIT PIECE NUMBER</div>
+        <div class="ccf-item-display" id="ccf-item-display">
+          <span class="ccf-digit-box" id="ccf-d0">_</span>
+          <span class="ccf-digit-box" id="ccf-d1">_</span>
+          <span class="ccf-digit-box" id="ccf-d2">_</span>
+          <span class="ccf-digit-box" id="ccf-d3">_</span>
+          <span class="ccf-digit-box" id="ccf-d4">_</span>
+          <span class="ccf-digit-box" id="ccf-d5">_</span>
+          <span class="ccf-digit-box" id="ccf-d6">_</span>
+          <span class="ccf-digit-box" id="ccf-d7">_</span>
+          <span class="ccf-digit-box" id="ccf-d8">_</span>
+        </div>
+        <div class="keypad ccf-keypad">
+          <div class="key" onclick="ccfKey('1')">1</div>
+          <div class="key" onclick="ccfKey('2')">2</div>
+          <div class="key" onclick="ccfKey('3')">3</div>
+          <div class="key" onclick="ccfKey('4')">4</div>
+          <div class="key" onclick="ccfKey('5')">5</div>
+          <div class="key" onclick="ccfKey('6')">6</div>
+          <div class="key" onclick="ccfKey('7')">7</div>
+          <div class="key" onclick="ccfKey('8')">8</div>
+          <div class="key" onclick="ccfKey('9')">9</div>
+          <div class="key key-del ccf-del" onclick="ccfDel()">⌫</div>
+          <div class="key" onclick="ccfKey('0')">0</div>
+          <div class="key" style="visibility:hidden"></div>
+        </div>
+      </div>
+      <div id="ccf-step-customer" style="display:none">
+        <div class="ccf-step-label">STEP 2 — SELECT JOB</div>
+        <div id="ccf-customer-list"></div>
+      </div>
+      <div id="ccf-step-defects" style="display:none;flex-direction:column;flex:1;background:#0a0a0a;align-items:center;justify-content:center;padding:24px">
+        <div style="width:100%;max-width:360px;display:flex;flex-direction:column;align-items:center">
+          <div class="result-customer" id="ccf-title" style="color:#ff6b35;margin-bottom:16px;white-space:nowrap;overflow:hidden;text-align:center"></div>
+          <div class="result-details" id="ccf-piece-info" style="flex-shrink:0;width:100%"></div>
+
+          <!-- QTY PROMPT -->
+          <div id="ccf-qty-prompt" style="display:none;width:100%;flex-direction:row;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;gap:12px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--muted)">PCS TO REPORT</div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div onclick="ccfChangeQty(-1)" style="font-size:20px;font-weight:700;color:#ff4444;cursor:pointer;padding:4px 8px">−</div>
+              <div style="display:flex;align-items:baseline;gap:5px">
+                <div id="ccf-qty-display" style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--text);line-height:1">1</div>
+                <div id="ccf-qty-total" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted)">OF 1</div>
+              </div>
+              <div onclick="ccfChangeQty(1)" style="font-size:20px;font-weight:700;color:#44cc44;cursor:pointer;padding:4px 8px">+</div>
+            </div>
+          </div>
+          <div id="ccf-missing-toggle" onclick="ccfToggleMissing()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;cursor:pointer;margin-top:14px;flex-shrink:0">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;color:var(--text)">MISSING PIECE</span>
+            <div id="ccf-missing-check" style="width:22px;height:22px;border-radius:6px;border:2px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.15s"></div>
+          </div>
+
+          <!-- DEFECT CATEGORIES — hidden when missing -->
+          <div id="ccf-defect-section" style="width:100%">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.12em;color:var(--muted);padding:14px 0 8px;flex-shrink:0;width:100%">SELECT DEFECT CATEGORIES</div>
+            <div class="ccf-categories" id="ccf-categories" style="width:100%;margin-bottom:0"></div>
+          </div>
+
+          <!-- PHOTO SECTION — hidden when missing -->
+          <input type="file" id="ccf-photo-input" accept="image/*" capture="environment" style="display:none" onchange="ccfHandlePhoto(this)">
+          <div id="ccf-photo-section" style="width:100%">
+            <div style="border-top:1px solid var(--border);width:100%;margin:20px 0 0"></div>
+            <div id="ccf-photo-grid" style="width:100%;display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;margin-bottom:8px"></div>
+            <button onclick="document.getElementById('ccf-photo-input').click()" id="ccf-photo-btn" style="width:100%;padding:18px;background:transparent;color:#ff6b35;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.1em;border:1px solid #ff6b35;border-radius:14px;cursor:pointer;margin-top:8px;margin-bottom:8px">ADD PHOTO</button>
+          </div>
+
+          <button class="ccf-submit" id="ccf-submit-btn" onclick="ccfSubmit()" style="flex-shrink:0;margin-top:16px;width:100%">REPORT CCF</button>
+        </div>
+      </div>
+      <div id="ccf-confirm" style="display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:40px 28px">
+        <div class="complete-title" style="color:#ff6b35">CCF LOGGED</div>
+        <div id="ccf-confirm-project" style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--text);margin-top:16px;letter-spacing:0.05em"></div>
+        <div id="ccf-confirm-pieces" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:8px"></div>
+        <div id="ccf-confirm-defects" style="margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:300px"></div>
+        <button class="btn-next-pallet" style="background:#ff6b35;margin-top:32px" onclick="hideCCFConfirm()">DONE</button>
+      </div>
+    </div>
+  </div>
+  <div class="stats-bar" id="stats-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:50"></div>
+<div id="result-overlay" onclick="if(event.target===this)dismissResult()">
+  <div id="result-countdown" style="position:absolute;bottom:0;left:0;height:4px;background:rgba(255,255,255,0.4);width:100%;transform-origin:left;animation:none"></div>
   <div id="result-content"></div>
-</div>
-
-<!-- MANUAL OVERLAY -->
-<div id="manual-overlay">
-  <div class="manual-title">ENTER PIECE NUMBER</div>
-  <div class="manual-sub">TYPE THE 9-DIGIT NUMBER FROM THE LABEL</div>
-  <div class="manual-display" id="manual-display">_________</div>
-  <div class="keypad">
-    <div class="key" onclick="keyPress('1')">1</div>
-    <div class="key" onclick="keyPress('2')">2</div>
-    <div class="key" onclick="keyPress('3')">3</div>
-    <div class="key" onclick="keyPress('4')">4</div>
-    <div class="key" onclick="keyPress('5')">5</div>
-    <div class="key" onclick="keyPress('6')">6</div>
-    <div class="key" onclick="keyPress('7')">7</div>
-    <div class="key" onclick="keyPress('8')">8</div>
-    <div class="key" onclick="keyPress('9')">9</div>
-    <div class="key key-cancel" onclick="hideManual()">CANCEL</div>
-    <div class="key" onclick="keyPress('0')">0</div>
-    <div class="key key-del" onclick="keyDel()">⌫</div>
-  </div>
-  <div class="key key-go" style="width:100%;max-width:300px;height:56px;border-radius:12px;font-size:18px" onclick="keyGo()">LOOK UP →</div>
 </div>
 
 <!-- OCR PROCESSING -->
 <div id="ocr-processing">
   <div class="ocr-spinner"></div>
   <div class="ocr-label">READING LABEL...</div>
+</div>
+
+<!-- TAB BAR — last in DOM so it always paints on top -->
+<div class="tab-bar" id="main-tab-bar" style="display:none">
+  <div class="tab-btn active" id="tab-btn-scanner" onclick="switchTab('scanner')">⊡ KEYPAD</div>
+  <div class="tab-btn" id="tab-btn-scan" onclick="switchTab('scan')">◉ SCAN</div>
+  <div class="tab-btn" id="tab-btn-browse" onclick="switchTab('browse')">☰ BROWSE</div>
+  <div class="tab-btn" id="tab-btn-ccf" onclick="switchTab('ccf')" style="color:#ff6b35">⚠ CCF</div>
 </div>
 
 <!-- FLASH -->
@@ -694,93 +1513,127 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   // ── DATA ──
-  let itemIndex = {};     // itemNum → [{custRef, soNum, description, qty, containerId}]
-  let shipmentInfo = {};
+  let itemIndex     = {};   // itemNum → [{custRef, soNum, description, qty, containerId}]
+  let containerIndex = {};  // containerId → [{itemNum, soNum, custRef, description, qty}]
+  let shipmentInfo  = {};
   let customerColors = {};
+  let colorIdx = 0;
   let scanCount = 0;
-  let manualInput = '';
   let cameraStream = null;
   let torchOn = false;
   let lastScannedNum = '';
 
-  // Customer color palette — vivid, distinct
+  // ── RECEIVING STATE ──
+  let receivedItems = {};  // "itemNum_soNum_containerId" → true
+
+  const CONTAINER_PAT = /^(1711|7000)\d{9,12}$/;
+
+  // Customer color palette
   const PALETTE = [
     '#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa',
     '#00acc1','#e91e63','#fdd835','#6d4c41','#00897b',
     '#3949ab','#f4511e','#00e5ff','#76ff03','#ff4081'
   ];
-  let colorIdx = 0;
 
   function getCustomerColor(custRef) {
-    // Extract project name (before first _)
-    const proj = custRef.split('_')[0].split(' ')[0];
-    if (!customerColors[proj]) {
-      customerColors[proj] = PALETTE[colorIdx % PALETTE.length];
+    const key = custRef.split('_')[0].trim();
+    if (!customerColors[key]) {
+      customerColors[key] = PALETTE[colorIdx % PALETTE.length];
       colorIdx++;
     }
-    return customerColors[proj];
+    return customerColors[key];
   }
 
-  // ── PDF PARSING (same logic as main app) ──
+  // ── PDF LOADING ──
   const fileInput = document.getElementById('file-input');
-  fileInput.addEventListener('change', e => {
-    if (e.target.files[0]) loadPDF(e.target.files[0]);
-  });
+  document.getElementById('upload-box').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) loadPDF(e.target.files[0]); });
 
   async function loadPDF(file) {
-    document.getElementById('progress-wrap').style.display = 'block';
     document.getElementById('upload-box').style.opacity = '0.4';
     document.getElementById('upload-box').style.pointerEvents = 'none';
+    document.getElementById('progress-wrap').style.display = 'block';
+    setProgress(5, 'Loading PDF...');
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     const total = pdf.numPages;
+    let fullText = '';
 
-    for (let p = 1; p <= total; p++) {
-      const pct = Math.round((p / total) * 100);
-      document.getElementById('progress-fill').style.width = pct + '%';
-      document.getElementById('progress-status').textContent = `Page ${p} of ${total}`;
-
-      const page = await pdf.getPage(p);
+    for (let i = 1; i <= total; i++) {
+      setProgress(5 + Math.round((i / total) * 65), `Reading page ${i} of ${total}...`);
+      const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map(i => i.str).join(' ');
-      parsePage(text);
+      fullText += content.items.map(x => x.str).join(' ') + '\n';
     }
 
-    document.getElementById('progress-label').textContent = 'DONE — ' + Object.keys(itemIndex).length + ' ITEMS LOADED';
-    document.getElementById('progress-status').textContent = 'Starting scanner...';
+    setProgress(75, 'Parsing line items...');
+    parsePage(fullText);
+    setProgress(100, `Done — ${Object.keys(itemIndex).length} items across ${Object.keys(containerIndex).length} containers`);
 
-    setTimeout(() => startScanner(), 800);
+    await new Promise(r => setTimeout(r, 600));
+    document.getElementById('screen-load').classList.remove('active');
+    document.getElementById('screen-scan').classList.add('active');
+    document.getElementById('main-tab-bar').style.display = 'flex';
+    const statusEl = document.getElementById('scan-status');
+    if (statusEl) {
+      statusEl.textContent = 'PACKING LIST LOADED';
+      statusEl.style.color = 'var(--green)';
+    }
+    buildStatsBar();
+    startScanner();
   }
 
+  function setProgress(pct, msg) {
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-status').textContent = msg;
+  }
+
+  // ── PARSE PAGE (fixed: qty from last column, boilerplate stripped) ──
   function parsePage(text) {
-    const shipM = text.match(/Shipment[:\s#]*([\w-]+)/);
+    const shipM = text.match(/Shipment Notice[:\s]+(\d+)/);
     if (shipM && !shipmentInfo.shipmentNo) shipmentInfo.shipmentNo = shipM[1];
     const dateM = text.match(/Ship Date[:\s]+([\d/]+)/);
     if (dateM && !shipmentInfo.shipDate) shipmentInfo.shipDate = dateM[1];
 
-    const tokens = text.replace(/\s+/g, ' ').trim().split(' ');
-    const containerPat = /^(1711|7000)\d{9,12}$/;
-    const soPat = /^10\d{5}$/;
-    const descStart = /^(DW|DR|SH|VT|TR|FF|CK|BP|Wrap|Bottom|Shelf|Drawer|DF|WS|HP|DB|Vert|MWD|ADD)/i;
+    // Strip repeating page boilerplate
+    let clean = text
+      .replace(/Container\s+ID\s+Item\s+#\s+SO\s+#\s+Cust\s+Ref\s+Description\s+Qty/gi, ' ')
+      .replace(/Packing\s+List.*?(?=\d{13}|\n\n)/gis, ' ')
+      .replace(/SOLD-To\s+Party\s+\d+/gi, ' ')
+      .replace(/SHIP-To\s+Party\s+\d+/gi, ' ')
+      .replace(/IC\s+SOFLO\s+LLC/gi, ' ')
+      .replace(/Inspired\s+Closets\s+Miami/gi, ' ')
+      .replace(/Shipment\s+Notice[:\s]+\d+/gi, ' ')
+      .replace(/Ship\s+Date[:\s]+[\d/]+/gi, ' ')
+      .replace(/Page\s+\d+\s+of\s+\*/gi, ' ')
+      .replace(/\d+\s+Avenue\s+Of\s+The\s+Champions[^,]*,\s*Ste\s*\d+/gi, ' ')
+      .replace(/Palm\s+Beach\s+Gardens[^U]*US/gi, ' ')
+      .replace(/\d+\s+SW\s+\d+th\s+Ave/gi, ' ')
+      .replace(/Deerfield\s+Beach[^U]*US/gi, ' ');
+
+    const tokens = clean.replace(/\s+/g, ' ').trim().split(' ');
+    const itemPat = /^\d{9}$/;
+    const soPat   = /^10\d{5}$/;
+    const descStart = /^(DW|DR|SH|VT|TR|FF|CK|BP|WS|SC|DF|DK|DB|MP|Wrap|Shelf|Bottom|Base|Scribe|Board|Drawer|MWD|HP)$/i;
 
     for (let i = 0; i < tokens.length; i++) {
-      if (!containerPat.test(tokens[i])) continue;
+      if (!CONTAINER_PAT.test(tokens[i])) continue;
       const containerId = tokens[i];
       let j = i + 1;
-      if (j >= tokens.length || !/^\d{9}$/.test(tokens[j])) continue;
+      if (j >= tokens.length || !itemPat.test(tokens[j])) continue;
       const itemNum = tokens[j++];
       if (j >= tokens.length || !soPat.test(tokens[j])) continue;
       const soNum = tokens[j++];
 
       let custRefToks = [];
-      while (j < tokens.length && !descStart.test(tokens[j]) && !containerPat.test(tokens[j]) && custRefToks.length < 15) {
+      while (j < tokens.length && !descStart.test(tokens[j]) && !CONTAINER_PAT.test(tokens[j]) && custRefToks.length < 20) {
         custRefToks.push(tokens[j++]);
       }
-      const custRef = custRefToks.join(' ').trim();
 
       let descToks = [];
-      while (j < tokens.length && !containerPat.test(tokens[j]) && !/^\d{9}$/.test(tokens[j]) && descToks.length < 12) {
+      while (j < tokens.length && !CONTAINER_PAT.test(tokens[j])) {
+        if (itemPat.test(tokens[j]) && j+1 < tokens.length && soPat.test(tokens[j+1])) break;
         descToks.push(tokens[j++]);
       }
 
@@ -788,323 +1641,743 @@
       if (descToks.length > 0 && /^\d{1,3}$/.test(descToks[descToks.length - 1])) {
         qty = parseInt(descToks.pop());
       }
+
+      const custRef    = custRefToks.join(' ').trim();
       const description = descToks.join(' ').trim();
-      if (!custRef || !description) continue;
+      if (!custRef || !description) { i = j - 1; continue; }
 
+      // itemIndex
       if (!itemIndex[itemNum]) itemIndex[itemNum] = [];
-      // Avoid duplicates
-      const exists = itemIndex[itemNum].find(r => r.soNum === soNum && r.custRef === custRef);
-      if (!exists) {
-        itemIndex[itemNum].push({ custRef, soNum, description, qty, containerId });
-      }
+      const exists = itemIndex[itemNum].find(r => r.soNum === soNum && r.containerId === containerId);
+      if (!exists) itemIndex[itemNum].push({ custRef, soNum, description, qty, containerId });
+
+      // containerIndex
+      if (!containerIndex[containerId]) containerIndex[containerId] = [];
+      const cExists = containerIndex[containerId].find(r => r.itemNum === itemNum && r.soNum === soNum);
+      if (!cExists) containerIndex[containerId].push({ itemNum, soNum, custRef, description, qty, containerId });
+
+      i = j - 1;
     }
   }
 
-  // ── CAMERA ──
-  async function startScanner() {
-    document.getElementById('screen-load').classList.remove('active');
-    document.getElementById('screen-scan').classList.add('active');
-    buildStatsBar();
+  // ── TAB SWITCHING ──
+  let activeBrowsePallet = null;
 
-    const video = document.getElementById('camera-view');
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('screen-scan').classList.toggle('camera-on', tab === 'scan');
+    if (tab === 'browse') renderBrowsePallets();
+    if (tab === 'ccf') resetCCFState();
+  }
 
-    try {
-      // Stop any existing stream first
-      if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); }
+  function resetCCFState() {
+    ccfInput = '';
+    ccfSelectedItem = null;
+    ccfSelectedDefects = new Set();
+    ccfPhotos = [];
+    ccfMissing = false;
+    const check = document.getElementById('ccf-missing-check');
+    const toggle = document.getElementById('ccf-missing-toggle');
+    const photoSection = document.getElementById('ccf-photo-section');
+    if (check) { check.textContent = ''; check.style.background = 'transparent'; check.style.borderColor = 'var(--border)'; }
+    if (toggle) toggle.style.borderColor = 'var(--border)';
+    if (photoSection) photoSection.style.display = '';
+    const defectSection = document.getElementById('ccf-defect-section');
+    if (defectSection) defectSection.style.display = '';
+    ccfRenderPhotos();
+    document.getElementById('ccf-step-item').style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;width:100%;gap:16px';
+    document.getElementById('ccf-step-customer').style.display = 'none';
+    document.getElementById('ccf-step-defects').style.display = 'none';
+    document.getElementById('ccf-item-display').style.color = '';
+    updateCCFDisplay();
+  }
 
-      // Try rear camera first, fall back to any camera
-      let constraints = {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        }
-      };
+  function renderBrowsePallets() {
+    const bar = document.getElementById('browse-pallet-bar');
+    const pallets = Object.keys(containerIndex).sort();
+    if (!pallets.length) { bar.innerHTML = '<span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--muted)">No data loaded</span>'; return; }
+    if (!activeBrowsePallet || !containerIndex[activeBrowsePallet]) activeBrowsePallet = pallets[0];
+    bar.innerHTML = pallets.map((p, i) => `
+      <div class="browse-pallet-chip ${p === activeBrowsePallet ? 'active' : ''}" data-pallet-idx="${i}">${esc(p)}</div>
+    `).join('');
+    bar.querySelectorAll('.browse-pallet-chip').forEach((el, i) => {
+      el.addEventListener('click', () => {
+        activeBrowsePallet = pallets[i];
+        document.getElementById('browse-search').value = '';
+        renderBrowsePallets();
+      });
+    });
+    renderBrowseList();
+  }
 
-      try {
-        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch(e1) {
-        // Fallback — just get any camera
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+  function renderBrowseList() {
+    const tbody = document.getElementById('browse-list');
+    const empty = document.getElementById('browse-empty');
+    const query = (document.getElementById('browse-search').value || '').toLowerCase().trim();
+
+    // If searching, pull from ALL containers; otherwise show active pallet only
+    let entries = [];
+    if (query) {
+      entries = Object.values(containerIndex).flat();
+    } else {
+      if (!activeBrowsePallet) {
+        tbody.innerHTML = '';
+        empty.style.display = '';
+        empty.textContent = 'SELECT A PALLET ABOVE';
+        return;
       }
+      entries = containerIndex[activeBrowsePallet] || [];
+    }
 
-      video.srcObject = cameraStream;
+    let rows = entries.map(r => {
+      const scanned = receivedItems[`${r.itemNum}_${r.soNum}_${r.containerId}`] || 0;
+      const done = scanned >= r.qty;
+      const { projectName, roomNum } = parseCustRef(r.custRef);
+      const roomLabel = roomNum ? `${roomNum} - ${projectName}` : projectName;
+      return { ...r, scanned, done, roomLabel };
+    });
 
-      // Android Chrome often needs explicit play() call
-      video.onloadedmetadata = () => {
-        video.play().then(() => {
-          document.getElementById('scan-status').textContent = 'READY';
-          document.getElementById('scan-last').textContent = '— tap scan button to read piece number —';
-        }).catch(err => {
-          document.getElementById('scan-last').textContent = 'Camera error: ' + err.message;
-        });
-      };
+    if (query) {
+      rows = rows.filter(r =>
+        (r.description || '').toLowerCase().includes(query) ||
+        r.itemNum.includes(query) ||
+        r.roomLabel.toLowerCase().includes(query)
+      );
+    }
 
-      // Fallback if onloadedmetadata doesn't fire
-      setTimeout(() => {
-        if (video.paused) {
-          video.play().catch(() => {});
-        }
-      }, 1500);
+    // Sort: pending first, then done
+    rows.sort((a, b) => a.done - b.done);
 
-    } catch(e) {
-      document.getElementById('scan-status').textContent = 'NO CAMERA';
-      document.getElementById('scan-last').textContent = 'Camera blocked — use ✎ TYPE button · Error: ' + e.message;
-      document.getElementById('btn-scan').style.opacity = '0.4';
-      document.getElementById('btn-scan').style.pointerEvents = 'none';
+    if (!rows.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+      empty.textContent = 'NO ITEMS FOUND';
+      return;
+    }
+
+    empty.style.display = 'none';
+    tbody.innerHTML = rows.map(r => {
+      const statusIcon = r.done ? `<span style="color:var(--green)">✓</span>` : `<span style="color:var(--border)">○</span>`;
+      const qtyLabel = r.done
+        ? `<span style="color:var(--green)">${r.scanned}/${r.qty}</span>`
+        : `<span style="color:var(--yellow)">${r.scanned}/${r.qty}</span>`;
+      return `
+        <tr class="${r.done ? 'row-done' : ''}" onclick="browseItemTap('${r.itemNum}')">
+          <td class="col-status">${statusIcon}</td>
+          <td class="col-item">${esc(r.itemNum)}</td>
+          <td class="col-desc">${esc(r.description || '—')}</td>
+          <td class="col-room">${esc(r.roomLabel)}</td>
+          <td class="col-room" style="color:var(--muted)">${esc(r.containerId || '—')}</td>
+          <td class="col-qty">${qtyLabel}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function browseItemTap(itemNum) {
+    const matches = itemIndex[itemNum];
+    if (!matches || !matches.length) return;
+    window._resultOrigin = 'browse';
+    if (matches.length === 1) {
+      showItemResult(itemNum, matches[0], 'lookup');
+    } else {
+      showMultiPicker(itemNum, matches);
     }
   }
 
+  // ── STATS BAR ──
   function buildStatsBar() {
-    const total = Object.values(itemIndex).flat().length;
-    const customers = new Set(Object.values(itemIndex).flat().map(r => r.custRef.split('_')[0].split(' ')[0])).size;
-    const items = Object.keys(itemIndex).length;
+    const totalContainers = Object.keys(containerIndex).length;
+    const totalItems = Object.values(itemIndex).flat().length;
+    const totalPieces = Object.values(itemIndex).flat().reduce((s,r) => s + r.qty, 0);
     document.getElementById('stats-bar').innerHTML = `
-      <div class="stat-item"><div class="stat-num">${items}</div><div class="stat-label">Items</div></div>
-      <div class="stat-item"><div class="stat-num">${total}</div><div class="stat-label">Pieces</div></div>
-      <div class="stat-item"><div class="stat-num">${customers}</div><div class="stat-label">Customers</div></div>
-      <div class="stat-item"><div class="stat-num" id="stat-scans">0</div><div class="stat-label">Scanned</div></div>
+      <div class="stat-item"><div class="stat-num">${totalContainers}</div><div class="stat-label">Pallets</div></div>
+      <div class="stat-item"><div class="stat-num">${totalItems}</div><div class="stat-label">Items</div></div>
+      <div class="stat-item"><div class="stat-num">${totalPieces}</div><div class="stat-label">Pieces</div></div>
+      <div class="stat-item"><div class="stat-num" id="stat-scans">0</div><div class="stat-label">Received</div></div>
     `;
   }
 
-  // ── OCR SCAN ──
-  async function doScan() {
-    const video = document.getElementById('camera-view');
-    if (!video.srcObject) { showManual(); return; }
+  function updateReceivedCount() {
+    const statEl = document.getElementById('stat-scans');
+    if (statEl) statEl.textContent = scanCount;
+    // Keep browse list counts live
+    if (document.getElementById('tab-browse').classList.contains('active')) renderBrowseList();
+  }
 
-    document.getElementById('ocr-processing').classList.add('show');
-    document.getElementById('btn-scan').style.pointerEvents = 'none';
+  // ── MAIN KEYPAD (always visible) ──
+  let mainInput = '';
 
+  function mainKey(d) {
+    if (mainInput.length >= 4) return;
+    mainInput += d;
+    updateMainDisplay();
+    if (mainInput.length === 4) setTimeout(() => { lookupByLastDigits(mainInput); mainInput = ''; updateMainDisplay(); }, 180);
+  }
+
+  function mainDel() {
+    mainInput = mainInput.slice(0, -1);
+    updateMainDisplay();
+  }
+
+  function updateMainDisplay() {
+    const chars = (mainInput + '____').slice(0, 4).split('');
+    document.getElementById('main-digits').textContent = chars.join('  ');
+  }
+
+  function doScan() { switchTab('scan'); }
+  function hideScanCamera() { switchTab('scanner'); }
+
+  async function startScanner() {
     try {
-      // Capture frame from video
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-
-      // Crop to center region (where the piece number would be in the reticle)
-      const cropCanvas = document.createElement('canvas');
-      const cw = Math.floor(canvas.width * 0.7);
-      const ch = Math.floor(canvas.height * 0.25);
-      const cx = Math.floor((canvas.width - cw) / 2);
-      const cy = Math.floor((canvas.height - ch) / 2);
-      cropCanvas.width = cw;
-      cropCanvas.height = ch;
-      const cropCtx = cropCanvas.getContext('2d');
-
-      // Preprocess: grayscale + high contrast
-      cropCtx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
-      const imageData = cropCtx.getImageData(0, 0, cw, ch);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-        const contrast = gray > 128 ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = contrast;
-      }
-      cropCtx.putImageData(imageData, 0, 0);
-
-      // Run Tesseract
-      const result = await Tesseract.recognize(cropCanvas, 'eng', {
-        tessedit_char_whitelist: '0123456789',
-        tessedit_pageseg_mode: '7',
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
+      document.getElementById('camera-view').srcObject = cameraStream;
+    } catch(e) { console.warn('Camera error:', e); }
+  }
 
-      const rawText = result.data.text.replace(/\D/g, '').trim();
-      document.getElementById('ocr-processing').classList.remove('show');
-      document.getElementById('btn-scan').style.pointerEvents = 'all';
-
-      // Try to find a 9-digit sequence in the result
-      const match9 = rawText.match(/\d{9}/);
-      if (match9) {
-        lookupItem(match9[0]);
-      } else if (rawText.length >= 6) {
-        // Try fuzzy match — find closest item number
-        const fuzzyMatch = findFuzzy(rawText);
-        if (fuzzyMatch) {
-          lookupItem(fuzzyMatch);
-        } else {
-          showNotFound(rawText || '???', 'Could not read clearly — try again or use TYPE');
-        }
+  async function doOCRScan() {
+    if (!cameraStream) return;
+    const btn = document.getElementById('btn-scan');
+    btn.style.opacity = '0.5';
+    document.getElementById('ocr-processing').classList.add('show');
+    try {
+      const video = document.getElementById('camera-view');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      document.getElementById('ocr-processing').querySelector('.ocr-label').textContent = 'READING LABEL...';
+      const result = await Tesseract.recognize(canvas, 'eng', { logger: () => {} });
+      const raw = result.data.text;
+      const found = findFuzzy(raw);
+      hideScanCamera();
+      if (found) {
+        handleInput(found);
       } else {
-        showNotFound('—', 'Nothing detected — hold steady and try again');
+        showNotFound('?', 'Could not read label');
+        vibrate([50,30,50]);
+        flashScreen('red');
       }
     } catch(e) {
+      hideScanCamera();
+      showNotFound('!', 'OCR error');
+    } finally {
       document.getElementById('ocr-processing').classList.remove('show');
-      document.getElementById('btn-scan').style.pointerEvents = 'all';
-      showNotFound('ERROR', 'OCR failed — use TYPE button instead');
+      btn.style.opacity = '1';
     }
   }
 
   function findFuzzy(rawText) {
-    // If OCR returns something close but not exact 9 digits, try matching known item numbers
-    const keys = Object.keys(itemIndex);
-    for (const key of keys) {
-      if (rawText.includes(key) || key.includes(rawText)) return key;
+    // Try 13-digit container ID first
+    const container13 = rawText.match(/\b(1711|7000)\d{9,11}\b/);
+    if (container13) return container13[0].replace(/\s/g,'');
+    // Try 9-digit item number
+    const nums = rawText.match(/\b\d{7,10}\b/g) || [];
+    for (const n of nums) {
+      const cleaned = n.replace(/\s/g,'');
+      if (/^\d{9}$/.test(cleaned) && itemIndex[cleaned]) return cleaned;
     }
     return null;
   }
 
-  // ── TORCH ──
   function toggleTorch() {
     if (!cameraStream) return;
     const track = cameraStream.getVideoTracks()[0];
     torchOn = !torchOn;
-    try {
-      track.applyConstraints({ advanced: [{ torch: torchOn }] });
-      document.getElementById('btn-torch').textContent = torchOn ? '⚡ OFF' : '⚡ LIGHT';
-    } catch(e) {}
+    track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => {});
+    const btn = document.getElementById('btn-torch');
+    btn.style.color = torchOn ? 'var(--yellow)' : '';
+    btn.style.borderColor = torchOn ? 'var(--yellow)' : '';
   }
 
-  // ── LOOKUP ──
-  function lookupItem(itemNum) {
-    lastScannedNum = itemNum;
-    scanCount++;
-    document.getElementById('stat-scans') && (document.getElementById('stat-scans').textContent = scanCount);
-    document.getElementById('scan-last').textContent = 'Last: ' + itemNum;
+  // ── MAIN INPUT HANDLER ──
+  function handleInput(num) {
+    lastScannedNum = num;
+    document.getElementById('scan-last').textContent = num;
 
-    const matches = itemIndex[itemNum];
-
-    if (!matches || matches.length === 0) {
+    if (/^\d{9}$/.test(num)) {
+      handleItemScan(num);
+    } else {
+      showNotFound(num, 'Enter a 9-digit item number');
+      vibrate([30,20,30]);
       flashScreen('red');
-      vibrate([100, 50, 100]);
-      showNotFound(itemNum, 'Not found in packing list');
+    }
+  }
+
+  // ── ITEM SCAN ── (lookup only — confirm button marks received)
+  function handleItemScan(itemNum) {
+    const matches = itemIndex[itemNum];
+    if (!matches || matches.length === 0) {
+      showNotFound(itemNum, 'Item not found in this shipment');
+      vibrate([50,30,50]);
+      flashScreen('red');
+      return;
+    }
+    if (matches.length === 1) {
+      showItemResult(itemNum, matches[0], 'lookup');
+    } else {
+      showMultiPicker(itemNum, matches);
+    }
+  }
+
+  function showQtyConfirm(itemNum, soNum, containerId, qty) {
+    const picker = document.getElementById('qty-picker-area');
+    if (!picker) return;
+    picker.innerHTML = `
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);text-align:center;letter-spacing:0.1em;margin-bottom:8px">CONFIRM ${qty} PIECE${qty > 1 ? 'S' : ''}?</div>
+      <div style="display:flex;gap:6px">
+        <div onclick="event.stopPropagation();confirmReceiveQty('${itemNum}','${soNum}','${containerId}',${qty})"
+             style="flex:2;padding:12px;background:var(--green);border-radius:10px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:20px;color:#000;cursor:pointer;letter-spacing:0.06em">✓ YES, ${qty} PC${qty > 1 ? 'S' : ''}</div>
+        <div onclick="event.stopPropagation();resetQtyPicker('${itemNum}','${soNum}','${containerId}')"
+             style="flex:1;padding:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:10px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);cursor:pointer;letter-spacing:0.08em">✕</div>
+      </div>`;
+  }
+
+  function resetQtyPicker(itemNum, soNum, containerId) {
+    const allMatches = window._multiMatches ? window._multiMatches.matches : (itemIndex[itemNum] || []);
+    const match = allMatches.find(r => r.soNum === soNum && r.containerId === containerId);
+    if (!match) return;
+    const roomEntries = (itemIndex[itemNum] || []).filter(r => r.custRef === match.custRef);
+    const roomTotal = roomEntries.reduce((s,r) => s + r.qty, 0);
+    const roomScanned = roomEntries.reduce((s,r) => s + (receivedItems[`${itemNum}_${r.soNum}_${r.containerId}`] || 0), 0);
+    const roomRemaining = roomTotal - roomScanned;
+    const picker = document.getElementById('qty-picker-area');
+    if (!picker) return;
+    const chips = Array.from({length: roomRemaining}, (_,i) => i+1).map(n => `
+      <div onclick="event.stopPropagation();showQtyConfirm('${itemNum}','${soNum}','${containerId}',${n})"
+           style="flex:1;padding:10px 4px;background:var(--green);border-radius:10px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:22px;color:#000;cursor:pointer;letter-spacing:0.04em">${n}</div>
+    `).join('');
+    picker.innerHTML = `
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);text-align:center;letter-spacing:0.1em;margin-bottom:8px">HOW MANY PIECES IN HAND?</div>
+      <div style="display:flex;gap:6px">${chips}</div>`;
+  }
+
+  function confirmReceive(itemNum, soNum, containerId) {
+    const matches = itemIndex[itemNum];
+    const match = matches.find(r => r.soNum === soNum && r.containerId === containerId);
+    if (!match) return;
+    receiveItem(itemNum, match, 1);
+  }
+
+  function confirmReceiveQty(itemNum, soNum, containerId, qty) {
+    // Find the custRef for this match to know which room's entries to fill
+    const allMatches = window._multiMatches ? window._multiMatches.matches : (itemIndex[itemNum] || []);
+    const triggerMatch = allMatches.find(r => r.soNum === soNum && r.containerId === containerId);
+    if (!triggerMatch) return;
+
+    const custRef = triggerMatch.custRef;
+    const roomEntries = (itemIndex[itemNum] || []).filter(r => r.custRef === custRef);
+
+    let remaining = qty;
+    let totalAdded = 0;
+
+    for (const entry of roomEntries) {
+      if (remaining <= 0) break;
+      const key = `${itemNum}_${entry.soNum}_${entry.containerId}`;
+      const alreadyScanned = receivedItems[key] || 0;
+      const canAdd = Math.min(entry.qty - alreadyScanned, remaining);
+      if (canAdd > 0) {
+        receivedItems[key] = alreadyScanned + canAdd;
+        totalAdded += canAdd;
+        remaining -= canAdd;
+      }
+    }
+
+    if (totalAdded > 0) {
+      scanCount += totalAdded;
+      updateReceivedCount();
+      vibrate([60]);
+      flashScreen('green');
+    }
+
+    if (window._multiMatches && window._multiMatches.itemNum === itemNum) {
+      showMultiPicker(itemNum, window._multiMatches.matches);
+    } else {
+      showItemResult(itemNum, triggerMatch, 'received');
+    }
+  }
+
+  function getNextMatchForGroup(itemNum, indices) {
+    const matches = window._multiMatches ? window._multiMatches.matches : (itemIndex[itemNum] || []);
+    // Find first index that still has remaining qty
+    for (const i of indices) {
+      const r = matches[i];
+      const key = `${itemNum}_${r.soNum}_${r.containerId}`;
+      if ((receivedItems[key] || 0) < r.qty) return i;
+    }
+    return indices[0]; // all full — return first (will show received state)
+  }
+
+  function receiveItem(itemNum, match, qty) {
+    qty = qty || 1;
+    const key = `${itemNum}_${match.soNum}_${match.containerId}`;
+    const scannedSoFar = receivedItems[key] || 0;
+    const remaining = match.qty - scannedSoFar;
+
+    if (remaining <= 0) {
+      if (window._multiMatches && window._multiMatches.itemNum === itemNum) {
+        showMultiPicker(itemNum, window._multiMatches.matches);
+      } else {
+        showItemResult(itemNum, match, 'duplicate');
+        vibrate([30,20,30]);
+        flashScreen('red');
+      }
       return;
     }
 
+    const addQty = Math.min(qty, remaining);
+    receivedItems[key] = scannedSoFar + addQty;
+    scanCount += addQty;
+    updateReceivedCount();
+    vibrate([60]);
     flashScreen('green');
-    vibrate([50]);
 
-    if (matches.length === 1) {
-      showSingleResult(itemNum, matches[0]);
+    if (window._multiMatches && window._multiMatches.itemNum === itemNum) {
+      showMultiPicker(itemNum, window._multiMatches.matches);
     } else {
-      showMultiResult(itemNum, matches);
+      showItemResult(itemNum, match, 'received');
     }
   }
 
-  function showSingleResult(itemNum, match) {
-    const color = getCustomerColor(match.custRef);
-    const proj = match.custRef.split('_')[0];
-    // Extract room from custRef — everything after last _ segment
-    const parts = match.custRef.split('_');
-    const room = parts.length > 1 ? parts[parts.length - 1].replace(/-/g, ' ') : match.custRef;
-    // Clean up room — remove leading numbers like "1 - "
-    const cleanRoom = room.replace(/^\d+\s*-\s*/, '').trim();
+  // ── CUSTREF PARSER ──
+  // Format: "[N -] LastName_date-code[_N-RoomName]"
+  // Leading N is the room number — most important for workers
+  function parseCustRef(ref) {
+    // Extract leading room number (the "2" in "2 - Martinez_...")
+    const roomNumMatch = ref.match(/^(\d+)\s*[-–]/);
+    const roomNum = roomNumMatch ? roomNumMatch[1] : null;
 
-    document.getElementById('result-content').innerHTML = `
-      <div class="result-tag">PIECE ${itemNum}</div>
-      <div class="result-customer">${esc(proj)}</div>
-      <div class="result-room">${esc(cleanRoom || match.custRef)}</div>
-      <div class="result-details">
-        <div class="result-detail-row">
-          <span class="result-detail-label">DESCRIPTION</span>
-          <span class="result-detail-value">${esc(match.description)}</span>
-        </div>
-        <div class="result-detail-row">
-          <span class="result-detail-label">SO#</span>
-          <span class="result-detail-value">${esc(match.soNum)}</span>
-        </div>
-        <div class="result-detail-row">
-          <span class="result-detail-label">QTY</span>
-          <span class="result-detail-value">${match.qty}</span>
-        </div>
-        <div class="result-detail-row">
-          <span class="result-detail-label">CONTAINER</span>
-          <span class="result-detail-value" style="font-size:10px">…${(match.containerId||'—').slice(-6)}</span>
-        </div>
-      </div>
-    `;
+    // Strip prefixes: leading N-, VERTS REPLAC., ADD ON -
+    let clean = ref.replace(/^(VERTS\s+REPLAC\.\s*-\s*|ADD\s+ON\s*-\s*)/i, '').trim();
+    clean = clean.replace(/^\d+\s*[-–]\s*/, '').trim();
 
-    const overlay = document.getElementById('result-overlay');
-    overlay.style.background = color;
-    overlay.classList.add('show');
+    const parts = clean.split('_');
+    const customer = parts[0].trim();
+    // Full project name: "Bergman_101525-P" (first two segments joined by _)
+    const projectName = parts.length >= 2 ? `${parts[0].trim()}_${parts[1].trim()}` : customer;
+
+    // Room name from third segment (e.g. "1-Master Walk-In" → "Master Walk-In")
+    let roomName = '';
+    if (parts.length >= 3) {
+      roomName = parts[2].replace(/^\d+\s*[-–]\s*/, '').trim();
+    }
+
+    // Build display: "#2 · Master Walk-In" or just "#2" or just room name
+    let room = '';
+    if (roomNum && roomName) room = `#${roomNum} · ${roomName}`;
+    else if (roomNum)        room = `#${roomNum}`;
+    else if (roomName)       room = roomName;
+
+    return { customer, projectName, room, roomNum };
   }
+  function showMultiPicker(itemNum, matches) {
+    const description = matches[0].description;
 
-  function showMultiResult(itemNum, matches) {
-    const items = matches.map((m, i) => {
-      const color = getCustomerColor(m.custRef);
-      const proj = m.custRef.split('_')[0];
-      const parts = m.custRef.split('_');
-      const room = (parts.length > 1 ? parts[parts.length - 1] : m.custRef).replace(/-/g, ' ').replace(/^\d+\s*-\s*/, '').trim();
+    const alreadyAll = matches.every(r =>
+      (receivedItems[`${itemNum}_${r.soNum}_${r.containerId}`] || 0) >= r.qty
+    );
+
+    const header = '';
+    const headerColor = 'rgba(255,255,255,0.4)';
+
+    // Store matches for button access
+    window._multiMatches = { itemNum, matches };
+
+    // Group by custRef so same project = one button
+    const groups = [];
+    matches.forEach((r, i) => {
+      const existing = groups.find(g => g.custRef === r.custRef);
+      if (existing) {
+        existing.indices.push(i);
+        existing.totalQty += r.qty;
+      } else {
+        groups.push({
+          custRef: r.custRef,
+          indices: [i],
+          totalQty: r.qty,
+          firstMatch: r
+        });
+      }
+    });
+
+    // Recalculate scanned fresh for every group
+    groups.forEach(g => {
+      g.scanned = g.indices.reduce((sum, i) => {
+        const r = matches[i];
+        return sum + (receivedItems[`${itemNum}_${r.soNum}_${r.containerId}`] || 0);
+      }, 0);
+    });
+
+    const rows = groups.map(g => {
+      const { projectName, roomNum } = parseCustRef(g.custRef);
+      const color = getCustomerColor(g.custRef);
+      const displayTitle = roomNum ? `${roomNum} - ${projectName}` : projectName;
+      const doneThis = g.scanned >= g.totalQty;
+      const btnStyle = doneThis
+        ? `border:1px solid ${color};background:rgba(0,0,0,0.2);`
+        : `border:1px solid ${color}40;background:rgba(0,0,0,0.2);`;
+      const badge = doneThis
+        ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);text-align:center;letter-spacing:0.1em;margin-top:6px">✓ NO MORE PIECES NEEDED</div>`
+        : `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.35);text-align:center;letter-spacing:0.08em;margin-top:6px">${g.scanned} of ${g.totalQty} pcs</div>`;
+      const indicesJson = JSON.stringify(g.indices);
       return `
-        <div class="result-multi-item" style="background:${color}22;border-color:${color}55" onclick="dismissResult()">
-          <div class="result-multi-customer">${esc(proj)}</div>
-          <div class="result-multi-room">${esc(room)}</div>
-          <div class="result-multi-so">SO# ${esc(m.soNum)} · ${esc(m.description)}</div>
+        <div onclick="event.stopPropagation();(function(){var idx=getNextMatchForGroup('${itemNum}',${indicesJson});showItemResult('${itemNum}',window._multiMatches.matches[idx],'${doneThis ? 'received' : 'lookup'}');})()"
+             class="result-multi-project-btn"
+             style="width:100%;box-sizing:border-box;margin-bottom:10px;border-radius:12px;padding:14px 20px;cursor:pointer;${btnStyle}position:relative;display:flex;flex-direction:column;align-items:center;${doneThis ? 'opacity:0.6' : ''}">
+          <div class="result-multi-project" style="color:${color};white-space:nowrap;font-family:'Bebas Neue',sans-serif;letter-spacing:0.04em;line-height:1;text-align:center">${esc(displayTitle)}</div>
+          ${badge}
         </div>`;
     }).join('');
 
-    document.getElementById('result-content').innerHTML = `
-      <div class="result-multi-title">⚠ ${matches.length} MATCHES FOR ${itemNum}</div>
-      ${items}
-    `;
+    const allEntries = itemIndex[itemNum] || [];
+    const globalTotal = allEntries.reduce((s,r) => s + r.qty, 0);
+    const globalScanned = allEntries.reduce((s,r) => s + (receivedItems[`${itemNum}_${r.soNum}_${r.containerId}`] || 0), 0);
+    const globalRemaining = globalTotal - globalScanned;
+    const globalCountColor = globalRemaining === 0 ? 'var(--green)' : 'var(--yellow)';
+    const globalCountLabel = globalRemaining === 0
+      ? `${globalScanned} of ${globalTotal} total · ALL DONE`
+      : `${globalScanned} of ${globalTotal} total · ${globalRemaining} remaining`;
 
-    const overlay = document.getElementById('result-overlay');
-    overlay.style.background = '#1a1200';
-    overlay.classList.add('show');
+    document.getElementById('result-content').innerHTML = `
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;letter-spacing:0.1em;color:${headerColor};margin-bottom:6px;text-align:center;width:100%">${header}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${globalCountColor};letter-spacing:0.08em;text-align:center;margin-bottom:12px;width:100%">${globalCountLabel}</div>
+      ${rows}`;
+
+    showResultOverlay(alreadyAll ? 'var(--green)' : 'rgba(255,255,255,0.2)');
   }
 
-  function showNotFound(itemNum, reason) {
+  function confirmMultiReceive(itemNum) {
+    const matches = itemIndex[itemNum] || [];
+    for (const r of matches) {
+      const key = `${itemNum}_${r.soNum}_${r.containerId}`;
+      const current = receivedItems[key] || 0;
+      if (current < r.qty) {
+        scanCount += (r.qty - current);
+        receivedItems[key] = r.qty;
+      }
+    }
+    updateReceivedCount();
+    vibrate([60]);
+    flashScreen('green');
+  }
+
+  function showItemResult(itemNum, match, state) {
+    const { customer, projectName, room, roomNum } = parseCustRef(match.custRef);
+    const color = getCustomerColor(match.custRef);
+    const displayTitle = roomNum ? `${roomNum} - ${projectName}` : projectName;
+
+    // Count for this specific room/custRef only
+    const roomEntries = (itemIndex[itemNum] || []).filter(r => r.custRef === match.custRef);
+    const roomTotal = roomEntries.reduce((s,r) => s + r.qty, 0);
+    const roomScanned = roomEntries.reduce((s,r) => s + (receivedItems[`${itemNum}_${r.soNum}_${r.containerId}`] || 0), 0);
+    const roomRemaining = roomTotal - roomScanned;
+    const countColor = roomRemaining === 0 ? 'var(--green)' : 'var(--yellow)';
+    const countLabel = roomRemaining === 0
+      ? `${roomScanned} of ${roomTotal} · ALL DONE`
+      : `${roomScanned} of ${roomTotal} · ${roomRemaining} remaining`;
+
+    let header, headerColor, buttons;
+    const fromMulti = !!(window._multiMatches && window._multiMatches.itemNum === itemNum);
+
+    if (state === 'lookup') {
+      header = '';
+      headerColor = 'rgba(255,255,255,0.4)';
+      if (roomRemaining === 0) {
+        buttons = `
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <div onclick="event.stopPropagation();${fromMulti ? `showMultiPicker('${itemNum}',window._multiMatches.matches)` : 'dismissResult()'}" style="flex:1;padding:12px 16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:12px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:16px;color:rgba(255,255,255,0.6);cursor:pointer;letter-spacing:0.08em">← GO BACK · NO MORE PIECES NEEDED</div>
+          </div>`;
+      } else {
+        if (roomRemaining > 1) {
+          // Build qty chips from 1 to roomRemaining
+          const chips = Array.from({length: roomRemaining}, (_,i) => i+1).map(n => `
+            <div onclick="event.stopPropagation();showQtyConfirm('${itemNum}','${match.soNum}','${match.containerId}',${n})"
+                 style="flex:1;padding:10px 4px;background:var(--green);border-radius:10px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:22px;color:#000;cursor:pointer;letter-spacing:0.04em">${n}</div>
+          `).join('');
+          buttons = `
+            <div id="qty-picker-area" style="margin-top:16px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,0.4);text-align:center;letter-spacing:0.1em;margin-bottom:8px">HOW MANY PIECES IN HAND?</div>
+              <div style="display:flex;gap:6px">${chips}</div>
+            </div>`;
+        } else {
+          buttons = `
+            <div style="display:flex;gap:10px;margin-top:20px">
+              <div onclick="event.stopPropagation();confirmReceive('${itemNum}','${match.soNum}','${match.containerId}')" style="flex:1;padding:12px 16px;background:var(--green);border-radius:12px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:16px;color:#000;cursor:pointer;letter-spacing:0.08em">✓ CONFIRM RECEIVED</div>
+            </div>`;
+        }
+      }
+    } else if (state === 'received') {
+      header = '';
+      headerColor = 'var(--green)';
+      buttons = fromMulti ? `
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <div onclick="event.stopPropagation();showMultiPicker('${itemNum}',window._multiMatches.matches)" style="flex:1;padding:12px 16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:12px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:16px;color:rgba(255,255,255,0.6);cursor:pointer;letter-spacing:0.08em">← BACK TO CLOSETS</div>
+        </div>` : ``;
+    } else {
+      header = '⚠ ALREADY SCANNED';
+      headerColor = 'var(--yellow)';
+      buttons = fromMulti ? `
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <div onclick="event.stopPropagation();showMultiPicker('${itemNum}',window._multiMatches.matches)" style="flex:1;padding:12px 16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:12px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:16px;color:rgba(255,255,255,0.6);cursor:pointer;letter-spacing:0.08em">← BACK TO CLOSETS</div>
+        </div>` : ``;
+    }
+
+    document.getElementById('result-content').innerHTML = `
+      ${header ? `<div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;letter-spacing:0.1em;color:${headerColor};margin-bottom:12px;text-align:center">${header}</div>` : ''}
+      <div class="result-customer" style="color:${color}">${esc(displayTitle)}</div>
+      ${room && !roomNum ? `<div class="result-room">${esc(room)}</div>` : ''}
+      <div class="result-details">
+        <div class="result-detail-row">
+          <div class="result-detail-label">PIECE #</div>
+          <div class="result-detail-value" style="font-size:13px;letter-spacing:0.05em">${esc(itemNum)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">DESCRIPTION</div>
+          <div class="result-detail-value" style="font-size:12px">${esc(match.description)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">QTY</div>
+          <div class="result-detail-value">${match.qty}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">SO #</div>
+          <div class="result-detail-value">${esc(match.soNum)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">PALLET</div>
+          <div class="result-detail-value" style="font-family:'JetBrains Mono',monospace;font-size:12px">…${match.containerId.slice(-6)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">SCANNED</div>
+          <div class="result-detail-value" style="color:${countColor}">${countLabel}</div>
+        </div>
+      </div>
+      ${buttons}`;
+
+    const accentColor = state === 'received' ? color : state === 'lookup' ? 'rgba(255,255,255,0.2)' : 'var(--yellow)';
+    showResultOverlay(accentColor);
+  }
+
+  function showNotFound(num, reason) {
     document.getElementById('result-content').innerHTML = `
       <div class="result-notfound">NOT FOUND</div>
-      <div class="result-notfound-sub">${esc(itemNum)}</div>
-      <div class="result-notfound-sub" style="margin-top:8px;font-size:11px">${esc(reason)}</div>
-    `;
+      <div class="result-notfound-sub">${esc(String(num))}</div>
+      <div class="result-notfound-sub" style="margin-top:6px;font-size:10px;color:rgba(255,100,100,0.5)">${esc(reason)}</div>`;
+    showResultOverlay('var(--red)');
+  }
+
+  // Measure real rendered text width using an off-screen span with identical styles
+  let _measureSpan = null;
+  function getRealTextWidth(text, fontSize) {
+    if (!_measureSpan) {
+      _measureSpan = document.createElement('span');
+      _measureSpan.style.cssText = `
+        position:fixed; top:-9999px; left:-9999px; visibility:hidden; pointer-events:none;
+        font-family:'Bebas Neue',sans-serif; font-weight:normal;
+        letter-spacing:0.04em; white-space:nowrap;
+      `;
+      document.body.appendChild(_measureSpan);
+    }
+    _measureSpan.style.fontSize = fontSize + 'px';
+    _measureSpan.textContent = text;
+    return _measureSpan.getBoundingClientRect().width;
+  }
+
+  function shrinkTitleToFit() {
+    // Single-match title — fit to table width
+    const el = document.querySelector('#result-overlay .result-customer');
+    const table = document.querySelector('#result-overlay .result-details');
+    if (el && table) {
+      const availW = table.getBoundingClientRect().width;
+      el.style.width = availW + 'px';
+      const text = el.textContent.trim();
+      let size = 80;
+      while (size > 16 && getRealTextWidth(text, size) > availW) size--;
+      el.style.fontSize = size + 'px';
+    }
+
+    // Multi-match buttons — fit each name inside its button
+    document.querySelectorAll('.result-multi-project').forEach(card => {
+      const btn = card.closest('.result-multi-project-btn');
+      if (!btn) return;
+      const availW = btn.getBoundingClientRect().width - 40;
+      const text = card.textContent.trim();
+      let size = 80;
+      while (size > 16 && getRealTextWidth(text, size) > availW) size--;
+      card.style.fontSize = size + 'px';
+    });
+  }
+
+  function showResultOverlay(accentColor) {
     const overlay = document.getElementById('result-overlay');
-    overlay.style.background = '#1a0000';
+    overlay.style.background = '#0d0d0d';
+    overlay.style.borderTop = `4px solid ${accentColor}`;
     overlay.classList.add('show');
+    const bar = document.getElementById('result-countdown');
+    bar.style.animation = 'none';
+    document.fonts.ready.then(() => requestAnimationFrame(() => requestAnimationFrame(shrinkTitleToFit)));
   }
 
   function dismissResult() {
     document.getElementById('result-overlay').classList.remove('show');
+    if (window._resultOrigin === 'browse') {
+      window._resultOrigin = null;
+      switchTab('browse');
+    }
   }
 
-  // ── MANUAL INPUT ──
-  function showManual() {
-    manualInput = '';
-    updateManualDisplay();
-    document.getElementById('manual-overlay').classList.add('show');
-  }
-  function hideManual() {
-    document.getElementById('manual-overlay').classList.remove('show');
-  }
-  function keyPress(digit) {
-    if (manualInput.length >= 9) return;
-    manualInput += digit;
-    updateManualDisplay();
-    vibrate([10]);
-  }
-  function keyDel() {
-    manualInput = manualInput.slice(0, -1);
-    updateManualDisplay();
-  }
-  function keyGo() {
-    if (manualInput.length < 3) return;
-    hideManual();
-    lookupItem(manualInput);
-  }
-  function updateManualDisplay() {
-    const padded = manualInput.padEnd(9, '_');
-    document.getElementById('manual-display').textContent = padded;
+  // ── LOOKUP BY LAST DIGITS ──
+
+  function lookupByLastDigits(digits) {
+    if (!digits || digits.length < 2) return;
+    const matches = Object.keys(itemIndex).filter(n => n.endsWith(digits));
+    if (matches.length === 0) {
+      showNotFound(digits, 'No item ends with these digits');
+      vibrate([30,20,30]);
+      flashScreen('red');
+    } else if (matches.length === 1) {
+      handleInput(matches[0]);
+    } else {
+      // Multiple matches — show picker
+      document.getElementById('result-content').innerHTML = `
+        <div class="result-multi-title">MULTIPLE MATCHES for …${esc(digits)}</div>
+        ${matches.slice(0,6).map(n => {
+          const r = (itemIndex[n]||[])[0];
+          if (!r) return '';
+          const c = r.custRef.split('_')[0].replace(/^\d+\s*-\s*/,'').trim();
+          return `<div class="result-multi-item" onclick="handleInput('${n}');dismissResult()">
+            <div class="result-multi-customer">${esc(n)}</div>
+            <div class="result-multi-room">${esc(c)}</div>
+            <div class="result-multi-so">${esc(r.description.slice(0,30))}</div>
+          </div>`;
+        }).join('')}`;
+      showResultOverlay('var(--blue)');
+    }
   }
 
-  // ── UTILS ──
+  // ── FLASH / VIBRATE ──
   function flashScreen(color) {
     const el = document.getElementById('flash');
-    el.className = 'flash-' + color;
+    el.className = color === 'green' ? 'flash-green' : 'flash-red';
     el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 200);
+    setTimeout(() => el.classList.remove('show'), 150);
   }
 
   function vibrate(pattern) {
     if (navigator.vibrate) navigator.vibrate(pattern);
   }
 
+  // ── RESET ──
   function resetApp() {
     if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-    itemIndex = {}; shipmentInfo = {}; customerColors = {}; scanCount = 0; colorIdx = 0;
+    itemIndex = {}; containerIndex = {}; shipmentInfo = {};
+    customerColors = {}; receivedItems = {}; scanCount = 0; colorIdx = 0;
     document.getElementById('screen-scan').classList.remove('active');
     document.getElementById('screen-load').classList.add('active');
+    document.getElementById('main-tab-bar').style.display = 'none';
     document.getElementById('progress-wrap').style.display = 'none';
     document.getElementById('upload-box').style.opacity = '1';
     document.getElementById('upload-box').style.pointerEvents = 'all';
@@ -1112,7 +2385,299 @@
     fileInput.value = '';
   }
 
+  // ── CCF ──
+  const CCF_CATEGORIES = [
+    { group: 'Chips',    items: ['Drill', 'Cut'] },
+    { group: 'Color',    items: ['Board', 'Edgeband', 'Vinyl'] },
+    { group: 'Cut',      items: ['Not Square', 'Size', 'Thickness', 'Wrong'] },
+    { group: 'Drill',    items: ['Depth', 'Full / Half', 'Location', 'Missing'] },
+    { group: 'Edgeband', items: ['Location', 'Missing', 'Peeling', 'Short', 'Thickness'] },
+    { group: 'Grain',    items: ['Wrong Direction'] },
+    { group: 'Surface',  items: ['Dings / Dents', 'Bumps', 'Scratches', 'Wrinkle', 'Excessive Glue', 'Delamination', 'Tool Lines', 'Discoloration'] },
+    { group: 'Hardware', items: ['Defective'] },
+    { group: 'Warranty', items: ['Warranty'] },
+    { group: 'Warp',     items: ['Warp'] },
+  ];
+
+  let ccfInput = '';
+  let ccfSelectedItem = null;
+  let ccfSelectedDefects = new Set();
+  let ccfPhotos = [];
+  let ccfLog = [];
+
+  let ccfMissing = false;
+
+  function ccfToggleMissing() {
+    ccfMissing = !ccfMissing;
+    const check = document.getElementById('ccf-missing-check');
+    const toggle = document.getElementById('ccf-missing-toggle');
+    const photoSection = document.getElementById('ccf-photo-section');
+    const defectSection = document.getElementById('ccf-defect-section');
+    if (ccfMissing) {
+      check.textContent = '✓';
+      check.style.background = '#ff6b35';
+      check.style.borderColor = '#ff6b35';
+      check.style.color = '#000';
+      toggle.style.borderColor = '#ff6b35';
+      photoSection.style.display = 'none';
+      defectSection.style.display = 'none';
+      ccfSelectedDefects = new Set();
+      ccfPhotos = [];
+      ccfRenderPhotos();
+    } else {
+      check.textContent = '';
+      check.style.background = 'transparent';
+      check.style.borderColor = 'var(--border)';
+      toggle.style.borderColor = 'var(--border)';
+      photoSection.style.display = '';
+      defectSection.style.display = '';
+    }
+    ccfUpdateSubmitBtn();
+  }
+
+  function ccfHandlePhoto(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      ccfPhotos.push(e.target.result);
+      ccfRenderPhotos();
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  function ccfRenderPhotos() {
+    const grid = document.getElementById('ccf-photo-grid');
+    const btn = document.getElementById('ccf-photo-btn');
+    grid.innerHTML = ccfPhotos.map((src, i) => `
+      <div style="position:relative;width:calc(50% - 4px)">
+        <img src="${src}" style="width:100%;height:120px;object-fit:cover;border-radius:10px;border:2px solid #ff6b35;display:block">
+        <div onclick="ccfRemovePhoto(${i})" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.7);color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer">✕</div>
+      </div>`).join('');
+    btn.textContent = ccfPhotos.length > 0 ? `ADD ANOTHER PHOTO (${ccfPhotos.length})` : 'ADD PHOTO';
+  }
+
+  function ccfRemovePhoto(i) {
+    ccfPhotos.splice(i, 1);
+    ccfRenderPhotos();
+  }
+
+  function showCCF() { switchTab('ccf'); }
+  function hideCCF() { switchTab('scanner'); }
+
+  function ccfKey(d) {
+    if (ccfInput.length >= 9) return;
+    ccfInput += d;
+    updateCCFDisplay();
+    if (ccfInput.length === 9) setTimeout(ccfLookup, 150);
+  }
+
+  function ccfDel() {
+    ccfInput = ccfInput.slice(0, -1);
+    updateCCFDisplay();
+  }
+
+  function updateCCFDisplay() {
+    const chars = (ccfInput + '_________').slice(0, 9).split('');
+    chars.forEach((ch, i) => {
+      const el = document.getElementById(`ccf-d${i}`);
+      if (el) { el.textContent = ch; el.style.color = ch === '_' ? 'rgba(255,107,53,0.3)' : '#ff6b35'; }
+    });
+  }
+
+  function setCCFDisplayText(text, color) {
+    for (let i = 0; i < 9; i++) {
+      const el = document.getElementById(`ccf-d${i}`);
+      if (el) { el.textContent = i < text.length ? text[i] : ' '; el.style.color = color; }
+    }
+  }
+
+  function ccfLookup() {
+    if (ccfInput.length < 9) return;
+    const matches = itemIndex[ccfInput];
+    if (!matches || matches.length === 0) {
+      setCCFDisplayText('NOT FOUND', 'var(--red)');
+      setTimeout(() => {
+        ccfInput = '';
+        updateCCFDisplay();
+        document.getElementById('ccf-item-display').style.color = '#ff6b35';
+      }, 1500);
+      return;
+    }
+    if (matches.length === 1) {
+      ccfSelectMatch(ccfInput, matches[0]);
+    } else {
+      showCCFCustomerPicker(ccfInput, matches);
+    }
+  }
+
+  function showCCFCustomerPicker(itemNum, matches) {
+    document.getElementById('ccf-step-item').style.display = 'none';
+    document.getElementById('ccf-step-customer').style.display = 'block';
+    document.getElementById('ccf-customer-list').innerHTML = matches.map(r => {
+      const { customer, room } = parseCustRef(r.custRef);
+      const color = getCustomerColor(r.custRef);
+      return `<div class="ccf-customer-btn" onclick="ccfSelectMatch('${itemNum}', itemIndex['${itemNum}'].find(x=>x.soNum==='${r.soNum}'&&x.containerId==='${r.containerId}'))">
+        <div style="width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0"></div>
+        <div>
+          <div class="ccf-customer-btn-name">${room ? `<span style="color:#ff6b35">${esc(room)}</span> · ` : ''}${esc(customer)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function ccfSelectMatch(itemNum, match) {
+    ccfSelectedItem = { itemNum, match, qty: 1 };
+    ccfSelectedDefects = new Set();
+    const { customer, room, roomNum, projectName } = parseCustRef(match.custRef);
+
+    document.getElementById('ccf-step-item').style.display = 'none';
+    document.getElementById('ccf-step-customer').style.display = 'none';
+    document.getElementById('ccf-step-defects').style.display = 'flex';
+    document.getElementById('ccf-step-defects').style.flexDirection = 'column';
+
+    const titleEl = document.getElementById('ccf-title');
+    if (titleEl) {
+      titleEl.style.fontSize = '80px';
+      titleEl.textContent = roomNum ? `${roomNum} - ${projectName}` : projectName;
+      setTimeout(() => {
+        const table = document.getElementById('ccf-piece-info');
+        if (!table) return;
+        const availW = table.getBoundingClientRect().width;
+        titleEl.style.width = availW + 'px';
+        const text = titleEl.textContent.trim();
+        let size = 80;
+        while (size > 16 && getRealTextWidth(text, size) > availW) size--;
+        titleEl.style.fontSize = size + 'px';
+      }, 0);
+    }
+
+    document.getElementById('ccf-piece-info').innerHTML = `
+        <div class="result-detail-row">
+          <div class="result-detail-label">SO #</div>
+          <div class="result-detail-value" style="font-family:'JetBrains Mono',monospace;font-size:12px">${esc(match.soNum)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">PIECE #</div>
+          <div class="result-detail-value" style="font-size:13px;letter-spacing:0.05em">${esc(itemNum)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">DESCRIPTION</div>
+          <div class="result-detail-value" style="font-size:12px">${esc(match.description)}</div>
+        </div>
+        <div class="result-detail-row">
+          <div class="result-detail-label">PALLET</div>
+          <div class="result-detail-value" style="font-family:'JetBrains Mono',monospace;font-size:12px">…${match.containerId.slice(-6)}</div>
+        </div>`;
+
+    // Qty prompt — always shown
+    document.getElementById('ccf-qty-prompt').style.display = match.qty > 1 ? 'flex' : 'none';
+    document.getElementById('ccf-qty-display').textContent = '1';
+    document.getElementById('ccf-qty-total').textContent = `OF ${match.qty}`;
+    ccfSelectedItem.qty = 1;
+
+    document.getElementById('ccf-categories').innerHTML = CCF_CATEGORIES.map((cat, ci) => `
+      <div class="ccf-cat-group">
+        <div class="ccf-cat-header" onclick="ccfToggleDropdown(${ci})" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+          <span>${cat.group}</span>
+          <span id="ccf-cat-arrow-${ci}" style="font-size:10px;transition:transform 0.2s">▼</span>
+        </div>
+        <div id="ccf-cat-items-${ci}" class="ccf-cat-items" style="display:none">
+          ${cat.items.map(item => `
+            <div class="ccf-chip" onclick="ccfToggleDefect(this, '${cat.group} · ${item}')">${item}</div>
+          `).join('')}
+        </div>
+      </div>`).join('');
+
+    document.getElementById('ccf-submit-btn').classList.remove('ready');
+  }
+
+  function ccfChangeQty(delta) {
+    const max = ccfSelectedItem.match.qty;
+    ccfSelectedItem.qty = Math.min(max, Math.max(1, (ccfSelectedItem.qty || 1) + delta));
+    document.getElementById('ccf-qty-display').textContent = ccfSelectedItem.qty;
+    // Update button text if defects already selected
+    const btn = document.getElementById('ccf-submit-btn');
+    if (ccfSelectedDefects.size > 0) {
+      btn.textContent = `REPORT CCF — ${ccfSelectedItem.qty} PC${ccfSelectedItem.qty > 1 ? 'S' : ''} · ${ccfSelectedDefects.size} DEFECT${ccfSelectedDefects.size > 1 ? 'S' : ''}`;
+    }
+  }
+
+  function ccfToggleDropdown(ci) {
+    const items = document.getElementById(`ccf-cat-items-${ci}`);
+    const arrow = document.getElementById(`ccf-cat-arrow-${ci}`);
+    const open = items.style.display !== 'none';
+    items.style.display = open ? 'none' : 'flex';
+    arrow.style.transform = open ? '' : 'rotate(180deg)';
+  }
+
+  function ccfUpdateSubmitBtn() {
+    const qty = ccfSelectedItem ? (ccfSelectedItem.qty || 1) : 1;
+    const btn = document.getElementById('ccf-submit-btn');
+    if (!btn) return;
+    const ready = ccfSelectedDefects.size > 0 || ccfMissing;
+    btn.classList.toggle('ready', ready);
+    if (ccfMissing && ccfSelectedDefects.size === 0) {
+      btn.textContent = `REPORT CCF`;
+    } else if (ccfSelectedDefects.size > 0) {
+      btn.textContent = `REPORT CCF — ${qty} PC${qty > 1 ? 'S' : ''} · ${ccfSelectedDefects.size} DEFECT${ccfSelectedDefects.size > 1 ? 'S' : ''}`;
+    } else {
+      btn.textContent = 'REPORT CCF';
+    }
+  }
+
+  function ccfToggleDefect(el, key) {
+    if (ccfSelectedDefects.has(key)) {
+      ccfSelectedDefects.delete(key);
+      el.classList.remove('selected');
+    } else {
+      ccfSelectedDefects.add(key);
+      el.classList.add('selected');
+    }
+    ccfUpdateSubmitBtn();
+  }
+
+  function ccfSubmit() {
+    if (ccfSelectedDefects.size === 0 && !ccfMissing) return;
+    const { itemNum, match, qty } = ccfSelectedItem;
+    const { customer, room, roomNum, projectName } = parseCustRef(match.custRef);
+    const entry = {
+      itemNum, soNum: match.soNum, containerId: match.containerId,
+      custRef: match.custRef, description: match.description,
+      qty, defects: [...ccfSelectedDefects],
+      missing: ccfMissing,
+      photos: [...ccfPhotos],
+      ts: Date.now()
+    };
+    ccfLog.push(entry);
+
+    document.getElementById('ccf-step-item').style.display = 'none';
+    document.getElementById('ccf-step-customer').style.display = 'none';
+    document.getElementById('ccf-step-defects').style.display = 'none';
+
+    const projectLabel = roomNum ? `${roomNum} - ${projectName}` : projectName;
+    const confirmDiv = document.getElementById('ccf-confirm');
+    confirmDiv.style.display = 'flex';
+    document.getElementById('ccf-confirm-project').textContent = projectLabel;
+    document.getElementById('ccf-confirm-pieces').textContent = `${qty} PIECE${qty > 1 ? 'S' : ''}${ccfMissing ? ' · MISSING' : ''}`;
+    const defectTags = ccfMissing && ccfSelectedDefects.size === 0
+      ? ['MISSING PIECE']
+      : [...ccfSelectedDefects];
+    document.getElementById('ccf-confirm-defects').innerHTML = defectTags.map(d =>
+      `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.08em;color:#000;background:#ff6b35;padding:5px 10px;border-radius:6px">${d}</div>`
+    ).join('');
+
+    vibrate([80, 40, 80]);
+  }
+
+  function hideCCFConfirm() {
+    document.getElementById('ccf-confirm').style.display = 'none';
+    switchTab('scanner');
+  }
+
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 </script>
 </body>
 </html>

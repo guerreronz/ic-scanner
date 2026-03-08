@@ -1884,13 +1884,26 @@
   }
 
   function toggleTorch() {
-    if (!cameraStream) return;
+    if (!cameraStream) {
+      alert('Camera not started yet — switch to the SCAN tab first.');
+      return;
+    }
     const track = cameraStream.getVideoTracks()[0];
+    if (!track) return;
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    if (!capabilities.torch) {
+      alert('Flashlight not supported on this device/browser.');
+      return;
+    }
     torchOn = !torchOn;
-    track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => {});
+    track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(e => {
+      torchOn = !torchOn;
+      alert('Could not toggle flashlight: ' + e.message);
+    });
     const btn = document.getElementById('btn-torch');
     btn.style.color = torchOn ? 'var(--yellow)' : '';
     btn.style.borderColor = torchOn ? 'var(--yellow)' : '';
+    btn.textContent = torchOn ? '⚡ ON' : '⚡ FLASHLIGHT';
   }
 
   // ── MAIN INPUT HANDLER ──
